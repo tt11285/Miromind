@@ -10,7 +10,7 @@ For the demo, I will use the golden path: NVIDIA, with the question "Is NVIDIA's
 
 ## 0:45 to 1:20 - Workflow
 
-ValuationLens is not a single report-generation prompt. After clicking Run Deep Research, it creates structured artifacts at every stage: task framing, hypothesis generation, evidence collection, evidence scoring, reasoning synthesis, and memo rendering. Each stage produces reviewable outputs that can be inspected before trusting the final memo.
+ValuationLens is not a single report-generation prompt. After clicking Run Deep Research, the UI displays the staged workflow and exposes reviewable artifacts: hypothesis tree, evidence cards, scoring, reasoning notes, and the memo.
 
 ## 1:20 to 2:05 - Hypothesis Tree
 
@@ -22,4 +22,4 @@ The final investment memo summarizes the research path and gives the stance: Par
 
 ## 2:35 to 3:00 - Reasoning Transparency
 
-The key point is traceability. Click the final stance trace button and show how the final memo highlights related hypothesis nodes and evidence cards. Instead of asking viewers to accept a confident answer, ValuationLens exposes the hypothesis tree, evidence cards, node-level reasoning, uncertainty, and final judgment for review. ValuationLens makes the AI's investment research process traceable, challengeable, and reviewable.
+The key point is traceability. Click a memo section trace button such as Demand Sustainability or Valuation Sensitivity, and show how the final memo highlights related hypothesis nodes and evidence cards behind the Partially Supported stance. Instead of asking viewers to accept a confident answer, ValuationLens exposes the hypothesis tree, evidence cards, node-level reasoning, uncertainty, and final judgment for review. ValuationLens makes the AI's investment research process traceable, challengeable, and reviewable.

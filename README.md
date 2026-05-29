@@ -41,7 +41,7 @@ ValuationLens follows a six-stage workflow:
 
 ## MiroMind Integration
 
-ValuationLens can call the MiroMind chat completions endpoint:
+The visible UI demo remains fixture-backed by default so the hackathon walkthrough is stable. The API route calls MiroMind only when a request includes `useMiroMind: true` and `MIROMIND_API_KEY` is present.
 
 ```env
 MIROMIND_API_KEY=your_key_here
@@ -54,7 +54,15 @@ Endpoint:
 https://api.miromind.ai/v1/chat/completions
 ```
 
-Without credentials, the curated fixture pipeline keeps the hackathon demo stable.
+Example API flag:
+
+```json
+{
+  "useMiroMind": true
+}
+```
+
+Without credentials, or without `useMiroMind: true`, the curated fixture pipeline keeps the hackathon demo stable.
 
 ## Run Locally
 
