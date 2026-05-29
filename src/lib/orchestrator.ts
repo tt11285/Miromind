@@ -66,7 +66,7 @@ export async function runResearch(
   if (options.reasoner) {
     const note = await options.reasoner({
       task,
-      rootQuestion: artifacts.rootQuestion,
+      rootQuestion,
       nodeLabels: artifacts.nodes.map((node) => node.label)
     });
     memo.sections[0] = {
