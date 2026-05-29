@@ -67,9 +67,12 @@ The left column is where the user defines the research task.
 
 Controls:
 
-- Company input:
-  - Free text field, for example `NVIDIA`, `Microsoft`, `Micron`, `Tesla`, `TSMC`, `Palantir`.
-  - Quick chips for the demo set: NVIDIA, Microsoft, Micron, Tesla.
+- Company search:
+  - Searchable listed-company picker, not a plain free-text company field.
+  - The user can type a company name or ticker, for example `NVIDIA`, `NVDA`, `Micron`, `MU`.
+  - A dropdown shows matching public equities with company name, ticker, exchange, country, and asset type.
+  - The user must click one listed security before a research run can start.
+  - Quick chips for the demo set: NVIDIA / NVDA, Microsoft / MSFT, Micron / MU, Tesla / TSLA.
 - Research question textarea:
   - Free-form question.
   - Suggested prompts:
@@ -91,6 +94,7 @@ Controls:
   - News and events first
 - Run button:
   - `Run Deep Research`
+  - Disabled until a listed public equity is selected and the research question is non-empty.
 
 The panel must show the current mode:
 
@@ -99,6 +103,8 @@ The panel must show the current mode:
 - `Error`: live run failed and fallback is disabled.
 
 The API key is never entered in the browser. It is configured on the server through `.env.local`.
+
+The agent must not infer or guess the company identity from free text. Security identity is resolved before the research run through a company search endpoint.
 
 ### 5.2 Center Column: Live Research Chain And Memo
 
@@ -210,6 +216,11 @@ Recommended modules:
   - Orchestrates the live multi-stage run.
 - `src/lib/agent/fallback.ts`
   - Converts existing fixtures into the new event/artifact shape.
+- `src/lib/securities/search.ts`
+  - Searches listed public equities by company name or ticker.
+  - Returns only structured security candidates that the user can select.
+- `src/app/api/securities/search/route.ts`
+  - Exposes the ticker/company search endpoint used by the left column.
 - `src/app/api/research/run/route.ts`
   - Streams agent events to the browser.
 
@@ -219,6 +230,7 @@ Recommended modules:
 
 - `src/components/AgentInputPanel.tsx`
   - Replaces the static setup panel.
+  - Owns company/ticker search, dropdown results, selected security state, and run validation.
 - `src/components/AgentRunTimeline.tsx`
   - Shows streaming phase progress.
 - `src/components/LiveResearchWorkbench.tsx`
@@ -252,8 +264,14 @@ The client request includes:
 
 ```json
 {
-  "company": "Micron",
-  "question": "Is Micron's valuation justified by HBM-driven AI demand?",
+  "security": {
+    "name": "NVIDIA Corporation",
+    "ticker": "NVDA",
+    "exchange": "NASDAQ",
+    "country": "US",
+    "assetType": "Equity"
+  },
+  "question": "Is NVIDIA's current valuation justified by AI growth fundamentals?",
   "timeHorizon": "12M",
   "researchDepth": "deep",
   "evidencePreference": "balanced",
@@ -262,6 +280,30 @@ The client request includes:
 ```
 
 The API responds as a stream of JSON lines. Each line is one agent event.
+
+The research API must reject requests without a selected listed security. It must not accept a raw company string as enough information to start a run.
+
+The security search endpoint accepts a query:
+
+```text
+GET /api/securities/search?q=nvda
+```
+
+It returns candidates:
+
+```json
+[
+  {
+    "name": "NVIDIA Corporation",
+    "ticker": "NVDA",
+    "exchange": "NASDAQ",
+    "country": "US",
+    "assetType": "Equity"
+  }
+]
+```
+
+For the MVP, the search provider can be a curated public-equity list for the demo universe plus a simple local matcher. The UI and API contract should still be designed so a live market-symbol provider can replace it later.
 
 ## 8. Streaming Event Contract
 
@@ -297,7 +339,12 @@ The UI should update incrementally when each artifact arrives.
 
 Input:
 
-- Company text
+- Selected listed security:
+  - Company name
+  - Ticker
+  - Exchange
+  - Country
+  - Asset type
 - Question text
 - Time horizon
 - Research depth
@@ -305,14 +352,15 @@ Input:
 
 MiroMind output:
 
-- Normalized company name
-- Ticker if known
+- Restated selected company and ticker
 - Sector frame
 - Restated root question
 - Research objective
 - Decision criteria
 - Evidence categories needed
 - Safety note that this is research assistance
+
+Task framing must not ask MiroMind to guess the ticker or company identity. That identity comes from the selected security object. If the user has not selected a listed security, the run cannot start.
 
 ### 9.2 Hypothesis Generation
 
@@ -415,14 +463,17 @@ Fallback modes:
 - Missing key: show `Demo Fallback` before run starts.
 - Live error: show a visible warning and then load fallback artifacts only if `fallbackAllowed` is true.
 - User disables fallback: show an error instead of fixture results.
+- Non-demo security or question without a live key: show that a MiroMind API key is required for non-curated tasks.
 
-Fallback artifacts can reuse existing curated data, but the UI label must never imply they came from a live MiroMind run.
+Fallback artifacts can reuse existing curated data, but the UI label must never imply they came from a live MiroMind run. Fallback should only answer curated demo tasks where fixture coverage actually exists. It must not fabricate results for arbitrary selected securities or arbitrary questions.
 
 ## 12. Error Handling
 
 Expected errors:
 
 - Missing API key
+- No listed security selected
+- No matching public equity found
 - Invalid user input
 - MiroMind timeout
 - MiroMind non-JSON response
@@ -455,39 +506,58 @@ Generated memos should avoid commands like "buy", "sell", or "short" as instruct
 
 Primary live demo:
 
-- Company: Micron
-- Question: Is Micron's valuation justified by HBM-driven AI demand?
+- Company: NVIDIA Corporation
+- Ticker: NVDA
+- Exchange: NASDAQ
+- Question: Is NVIDIA's current valuation justified by AI growth fundamentals?
 - Time horizon: 12M
 - Research depth: Deep Agent
 - Evidence preference: Balanced
 
-Why Micron:
+Why NVIDIA:
 
-- It reflects the user's update replacing Apple with Micron.
+- The AI growth vs valuation question is immediately understandable to hackathon judges.
+- NVIDIA has a clear and high-stakes financial research tension: exceptional AI growth fundamentals versus valuation sensitivity.
+- The company has abundant public filings, earnings materials, market commentary, and bull/bear debate for evidence generation.
+- The demo can be explained in three minutes without teaching the audience a new industry cycle first.
+
+Secondary generality demo:
+
+- Company: Micron Technology, Inc.
+- Ticker: MU
+- Exchange: NASDAQ
+- Question: Is Micron's valuation justified by HBM-driven AI demand?
+
+Why Micron is secondary:
+
+- It reflects the user's update replacing Apple with Micron in the broader supported set.
 - HBM demand is an AI-infrastructure thesis with clear bull and bear arguments.
-- It is less overused than NVIDIA and better demonstrates that the app can handle more than one prewritten golden path.
-
-Backup demo:
-
-- Company: NVIDIA
-- Question: Is NVIDIA's current valuation justified by AI growth fundamentals?
+- It proves the agent is not hard-coded only for NVIDIA, but it requires more explanation than NVIDIA because memory cycles and HBM supply dynamics are less familiar.
 
 The final demo should show:
 
-1. User enters company and question.
-2. Agent run starts.
-3. Timeline stages move from running to complete.
-4. Hypothesis tree appears while the run progresses.
-5. Evidence cards appear linked to nodes.
-6. Memo appears with a final stance.
-7. Clicking a memo trace selects the relevant node and evidence.
-8. The UI displays `Live Agent` if MiroMind was used.
+1. User searches `NVIDIA` or `NVDA`.
+2. The dropdown shows `NVIDIA Corporation | NVDA | NASDAQ | US | Equity`.
+3. User selects the listed security.
+4. User enters or accepts the research question.
+5. Agent run starts.
+6. Timeline stages move from running to complete.
+7. Hypothesis tree appears while the run progresses.
+8. Evidence cards appear linked to nodes.
+9. Memo appears with a final stance.
+10. Clicking a memo trace selects the relevant node and evidence.
+11. The UI displays `Live Agent` if MiroMind was used.
 
 ## 15. Acceptance Criteria
 
 The Real Agent MVP is complete when:
 
-- A user can type any company string and any research question string.
+- A user can search by company name or ticker and select a listed public equity from a dropdown.
+- The dropdown displays company name, ticker, exchange, country, and asset type.
+- A user can type any research question after selecting a listed security.
+- `Run Deep Research` is disabled until a listed security is selected and the question is non-empty.
+- The research request sends a structured selected security object, not a raw company string.
+- The API rejects research requests that do not include a selected listed security.
 - The browser request triggers a MiroMind-backed run when `MIROMIND_API_KEY` is present.
 - The UI streams or progressively displays at least four live phases before final completion.
 - MiroMind generates a hypothesis tree rather than the app loading a fixed tree.
@@ -498,6 +568,9 @@ The Real Agent MVP is complete when:
 - README explains `.env.local` setup and live/fallback modes.
 - Tests cover:
   - missing key fallback
+  - listed-company search and selection
+  - run disabled until security selection and question entry
+  - API rejects missing selected security
   - live stream success with mocked MiroMind
   - malformed MiroMind JSON retry/failure
   - memo trace selects linked node/evidence
@@ -507,15 +580,16 @@ The Real Agent MVP is complete when:
 
 Implement in layers:
 
-1. Add new dynamic request and artifact types.
-2. Replace the left panel with free-text company/question input.
-3. Add server-side MiroMind stage calls with mocked tests.
-4. Add streaming response from the run route.
-5. Add client stream parser and progressive UI updates.
-6. Adapt hypothesis tree, evidence panel, and memo to dynamic artifacts.
-7. Relegate fixtures to explicit fallback mode.
-8. Update README and demo script.
-9. Run full browser verification on live mocked mode and fallback mode.
+1. Add selected-security, dynamic request, and agent artifact types.
+2. Add the listed-company search endpoint and local demo security matcher.
+3. Replace the left panel with searchable company/ticker picker plus research question input.
+4. Add run validation so research cannot start without a selected listed security.
+5. Add server-side MiroMind stage calls with mocked tests.
+6. Add streaming response from the run route.
+7. Add client stream parser and progressive UI updates.
+8. Adapt hypothesis tree, evidence panel, and memo to dynamic artifacts.
+9. Relegate fixtures to explicit curated fallback mode.
+10. Update README and demo script with NVIDIA as primary and Micron as secondary.
+11. Run full browser verification on live mocked mode, missing-key fallback mode, and invalid unselected-company state.
 
 The implementation should not delete the existing fixture system immediately. It should wrap it as fallback while the live agent path becomes the default.
-
