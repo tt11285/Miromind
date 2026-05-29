@@ -29,7 +29,7 @@ export function scoreResearchArtifacts(
 ): { nodes: NodeConclusion[]; memo: InvestmentMemo } {
   const scoredNodes = nodes.map((node) => scoreNode(node, evidence));
   const finalScore = roundScore(
-    scoredNodes.reduce((total, node) => total + node.weightedScore, 0)
+    scoredNodes.reduce((total, node) => total + node.weight * node.weightedScore, 0)
   );
   const memo = createInvestmentMemo(scoredNodes, evidence, finalScore);
 
@@ -38,15 +38,18 @@ export function scoreResearchArtifacts(
 
 function scoreNode(node: HypothesisNode, evidence: EvidenceCard[]): NodeConclusion {
   const nodeEvidence = evidence.filter((card) => card.claimNodeId === node.id);
-  const evidenceScore = nodeEvidence.reduce(
-    (total, card) => total + directionScores[card.direction] * evidenceWeight(card),
-    0
+  const evidenceScore = clampScore(
+    nodeEvidence.reduce(
+      (total, card) => total + directionScores[card.direction] * evidenceWeight(card),
+      0
+    )
   );
-  const weightedScore = roundScore(evidenceScore * node.weight);
+  const stance = scoreToNodeStance(evidenceScore);
+  const weightedScore = roundScore(evidenceScore);
 
   return {
     ...node,
-    stance: scoreToNodeStance(evidenceScore),
+    stance,
     confidence: scoreToConfidence(averageEvidenceWeight(nodeEvidence)),
     weightedScore,
     reasoningNote: createNodeReasoningNote(node, nodeEvidence, evidenceScore),
@@ -60,10 +63,10 @@ function evidenceWeight(card: EvidenceCard): number {
 }
 
 function scoreToNodeStance(score: number): NodeStance {
-  if (score >= 1.2) return "supports";
+  if (score >= 1.1) return "supports";
   if (score >= 0.3) return "weakly-supports";
-  if (score <= -1.2) return "refutes";
-  if (score <= -0.05) return "weakly-refutes";
+  if (score <= -1.1) return "refutes";
+  if (score <= -0.3) return "weakly-refutes";
   return "mixed";
 }
 
@@ -157,4 +160,8 @@ function createNodeReasoningNote(
 
 function roundScore(score: number): number {
   return Math.round(score * 100) / 100;
+}
+
+function clampScore(score: number): number {
+  return Math.max(-2, Math.min(2, score));
 }
