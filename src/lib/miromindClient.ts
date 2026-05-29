@@ -61,7 +61,7 @@ export function createMiroMindReasoner(
       throw new Error("MiroMind response did not include assistant content.");
     }
 
-    const parsed = parseJsonFromAssistantText(content);
+    const parsed = parseMiroMindResponseContent(content);
     if (!isSummaryResponse(parsed)) {
       throw new Error("MiroMind response JSON must include a string summary.");
     }
@@ -78,6 +78,18 @@ function buildPrompt(input: Parameters<ResearchReasoner>[0]): string {
     `Question template id: ${input.task.questionTemplateId}`,
     `Node labels: ${input.nodeLabels.join(", ")}`
   ].join("\n");
+}
+
+function parseMiroMindResponseContent(content: string): unknown {
+  try {
+    return parseJsonFromAssistantText(content);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error("MiroMind response content was not valid JSON.");
+    }
+
+    throw error;
+  }
 }
 
 function isSummaryResponse(value: unknown): value is { summary: string } {
