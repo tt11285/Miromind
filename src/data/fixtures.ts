@@ -14,6 +14,8 @@ interface FixtureArtifacts {
 
 const valuationWeights = [0.2, 0.15, 0.25, 0.2, 0.2];
 const defaultWeights = [0.22, 0.18, 0.2, 0.2, 0.2];
+const nvidiaValuationRootQuestion =
+  "Is NVIDIA's current valuation justified by AI growth fundamentals?";
 
 const nodeDefaults: Array<{
   stance: NodeStance;
@@ -309,10 +311,11 @@ export function createFixtureArtifacts(task: ResearchTask): FixtureArtifacts {
   const template = getQuestionTemplate(task.questionTemplateId);
   const isNvidiaGoldenPath =
     task.companyId === "nvda" && task.questionTemplateId === "valuation-growth";
+  const evidence = isNvidiaGoldenPath ? nvidiaValuationEvidence : createGenericEvidence(task);
 
   return {
-    rootQuestion: template.rootQuestion,
+    rootQuestion: isNvidiaGoldenPath ? nvidiaValuationRootQuestion : template.rootQuestion,
     nodes: createNodes(task),
-    evidence: isNvidiaGoldenPath ? nvidiaValuationEvidence : createGenericEvidence(task)
+    evidence: evidence.map((card) => ({ ...card }))
   };
 }

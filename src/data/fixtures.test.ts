@@ -5,6 +5,9 @@ import { defaultResearchTask } from "@/lib/researchConfig";
 describe("fixture artifacts", () => {
   it("builds a complete NVIDIA golden path", () => {
     const artifacts = createFixtureArtifacts(defaultResearchTask);
+    expect(artifacts.rootQuestion).toBe(
+      "Is NVIDIA's current valuation justified by AI growth fundamentals?"
+    );
     expect(artifacts.nodes).toHaveLength(5);
     expect(artifacts.evidence.length).toBeGreaterThanOrEqual(10);
     expect(artifacts.nodes.map((node) => node.label)).toEqual([
@@ -56,6 +59,10 @@ describe("fixture artifacts", () => {
         });
         expect(artifacts.nodes).toHaveLength(5);
         expect(artifacts.evidence.length).toBeGreaterThanOrEqual(3);
+        const nodeIds = new Set(artifacts.nodes.map((node) => node.id));
+        const evidenceIds = artifacts.evidence.map((card) => card.id);
+        expect(artifacts.evidence.every((card) => nodeIds.has(card.claimNodeId))).toBe(true);
+        expect(new Set(evidenceIds).size).toBe(evidenceIds.length);
         expect(artifacts.nodes.map((node) => node.weight)).toEqual(
           questionTemplateId === "valuation-growth"
             ? [0.2, 0.15, 0.25, 0.2, 0.2]
@@ -63,5 +70,13 @@ describe("fixture artifacts", () => {
         );
       }
     }
+  });
+
+  it("returns fresh evidence arrays and card objects on repeated calls", () => {
+    const first = createFixtureArtifacts(defaultResearchTask);
+    const second = createFixtureArtifacts(defaultResearchTask);
+
+    expect(first.evidence).not.toBe(second.evidence);
+    expect(first.evidence[0]).not.toBe(second.evidence[0]);
   });
 });
