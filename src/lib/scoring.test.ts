@@ -20,7 +20,7 @@ describe("research scoring", () => {
     expect(scored.memo.confidence).toBe("Medium-High");
     expect(scored.nodes).toHaveLength(5);
     expect(scored.nodes.find((node) => node.id === "valuation-sensitivity")?.stance).toBe(
-      "mixed"
+      "weakly-refutes"
     );
   });
 

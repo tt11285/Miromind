@@ -239,10 +239,10 @@ const nvidiaValuationEvidence: EvidenceCard[] = [
     quotedSnippet: "AI infrastructure demand can be cyclical if customer digestion periods emerge.",
     extractedFact: "A digestion phase after rapid infrastructure buildout would create multiple compression risk.",
     direction: "supports",
-    reliabilityScore: 0.74,
-    relevanceScore: 0.87,
-    freshnessScore: 0.91,
-    reasoningImpact: "Frames valuation risk as path-dependent on customer deployment and utilization.",
+    reliabilityScore: 0.5,
+    relevanceScore: 0.55,
+    freshnessScore: 0.6,
+    reasoningImpact: "Frames valuation risk as path-dependent, but with lower conviction than market multiple evidence.",
     urlOrReference: "Semiconductor industry cycle commentary"
   }
 ];
