@@ -101,6 +101,17 @@ export function ResearchWorkbench() {
     }
   }
 
+  function handleMemoSectionSelect(nodeIds: string[]) {
+    setHighlightedNodeIds(nodeIds);
+
+    const firstLinkedNodeId = nodeIds.find((nodeId) =>
+      run.nodes.some((node) => node.id === nodeId)
+    );
+    if (firstLinkedNodeId) {
+      setSelectedNodeId(firstLinkedNodeId);
+    }
+  }
+
   const selectedNode = run.nodes.find((node) => node.id === selectedNodeId) ?? null;
 
   return (
@@ -120,7 +131,7 @@ export function ResearchWorkbench() {
           <span className="mode-pill">{run.mode}</span>
         </div>
         <RunTimeline phases={run.phases} />
-        <InvestmentMemo memo={run.memo} onSectionSelect={setHighlightedNodeIds} />
+        <InvestmentMemo memo={run.memo} onSectionSelect={handleMemoSectionSelect} />
       </section>
       <aside className="trace-column">
         <HypothesisTree

@@ -49,4 +49,27 @@ describe("ResearchWorkbench", () => {
       within(evidencePanel).queryByRole("heading", { name: "Demand Sustainability" })
     ).not.toBeInTheDocument();
   });
+
+  it("selects linked evidence when a memo trace button is clicked", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network disabled in this component test");
+      })
+    );
+
+    render(<ResearchWorkbench />);
+
+    const evidencePanel = screen.getByRole("region", { name: "Evidence cards" });
+    expect(
+      within(evidencePanel).getByRole("heading", { name: "Revenue Growth" })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Demand Sustainability scores/ }));
+
+    expect(
+      within(evidencePanel).getByRole("heading", { name: "Demand Sustainability" })
+    ).toBeInTheDocument();
+    expect(within(evidencePanel).getAllByRole("article")).toHaveLength(2);
+  });
 });
