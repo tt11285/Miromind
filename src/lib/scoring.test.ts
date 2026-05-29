@@ -13,6 +13,13 @@ describe("research scoring", () => {
     expect(scoreToFinalStance(-1.4)).toBe("Not Supported");
   });
 
+  it("maps exact final stance boundaries", () => {
+    expect(scoreToFinalStance(1.2)).toBe("Supported");
+    expect(scoreToFinalStance(0.3)).toBe("Partially Supported");
+    expect(scoreToFinalStance(-0.3)).toBe("Weakly Unsupported");
+    expect(scoreToFinalStance(-1.2)).toBe("Not Supported");
+  });
+
   it("scores the NVIDIA golden path as partially supported", () => {
     const artifacts = createFixtureArtifacts(defaultResearchTask);
     const scored = scoreResearchArtifacts(artifacts.nodes, artifacts.evidence);
@@ -49,6 +56,23 @@ describe("research scoring", () => {
     expect(node.weightedScore).toBe(2);
     expect(node.stance).toBe("supports");
     expect(scored.memo.finalScore).toBe(2);
+  });
+
+  it("does not mark conflicting near-zero evidence as high confidence", () => {
+    const scored = scoreResearchArtifacts([createNode("conflicted")], [
+      createEvidence("conflicted-support", "conflicted", "supports", 0.95),
+      createEvidence("conflicted-refute", "conflicted", "refutes", 0.95)
+    ]);
+
+    expect(scored.nodes[0].weightedScore).toBe(0);
+    expect(scored.nodes[0].confidence).toBe("Medium");
+  });
+
+  it("reduces final confidence for low-confidence node sets", () => {
+    const scored = scoreResearchArtifacts([createNode("missing-one"), createNode("missing-two")], []);
+
+    expect(scored.nodes.map((node) => node.confidence)).toEqual(["Low", "Low"]);
+    expect(scored.memo.confidence).toBe("Medium");
   });
 });
 

@@ -50,7 +50,7 @@ function scoreNode(node: HypothesisNode, evidence: EvidenceCard[]): NodeConclusi
   return {
     ...node,
     stance,
-    confidence: scoreToConfidence(averageEvidenceWeight(nodeEvidence)),
+    confidence: scoreToNodeConfidence(nodeEvidence, evidenceScore),
     weightedScore,
     reasoningNote: createNodeReasoningNote(node, nodeEvidence, evidenceScore),
     supportingEvidence: nodeEvidence.filter((card) => card.direction === "supports"),
@@ -70,18 +70,28 @@ function scoreToNodeStance(score: number): NodeStance {
   return "mixed";
 }
 
-function scoreToConfidence(score: number): Confidence {
-  if (score >= 0.9) return "High";
-  if (score >= 0.8) return "Medium-High";
-  if (score >= 0.6) return "Medium";
+function scoreToNodeConfidence(cards: EvidenceCard[], score: number): Confidence {
+  if (cards.length === 0) return "Low";
+
+  const averageReliability =
+    cards.reduce((total, card) => total + card.reliabilityScore, 0) / cards.length;
+  const hasConflict =
+    cards.some((card) => card.direction === "supports") &&
+    cards.some((card) => card.direction === "refutes");
+
+  if (averageReliability > 0.82 && Math.abs(score) > 0.6 && !hasConflict) return "High";
+  if (averageReliability > 0.76 && Math.abs(score) > 0.25) return "Medium-High";
+  if (averageReliability > 0.65) return "Medium";
   return "Low";
 }
 
-function averageEvidenceWeight(evidence: EvidenceCard[]): number {
-  if (evidence.length === 0) return 0;
-  return (
-    evidence.reduce((total, card) => total + evidenceWeight(card), 0) / evidence.length
-  );
+function finalConfidence(nodes: NodeConclusion[], finalScore: number): Confidence {
+  const lowConfidenceCount = nodes.filter((node) => node.confidence === "Low").length;
+  const mixedCount = nodes.filter((node) => node.stance === "mixed").length;
+
+  if (lowConfidenceCount > 1) return "Medium";
+  if (mixedCount > 1 || Math.abs(finalScore) < 0.5) return "Medium";
+  return "Medium-High";
 }
 
 function createInvestmentMemo(
@@ -91,13 +101,16 @@ function createInvestmentMemo(
 ): InvestmentMemo {
   const topDrivers = nodes
     .filter((node) => node.weightedScore > 0)
-    .sort((left, right) => right.weightedScore - left.weightedScore)
+    .sort(
+      (left, right) =>
+        right.weight * right.weightedScore - left.weight * left.weightedScore
+    )
     .slice(0, 3);
   const counterNodes = nodes
     .filter((node) => node.weightedScore < 0 || node.counterEvidence.length > 0)
     .sort((left, right) => left.weightedScore - right.weightedScore);
   const biggestCounterargument = counterNodes[0];
-  const confidence = scoreToConfidence(averageEvidenceWeight(evidence));
+  const confidence = finalConfidence(nodes, finalScore);
 
   return {
     executiveSummary: createExecutiveSummary(finalScore, topDrivers, biggestCounterargument),
