@@ -22,6 +22,7 @@ export function HypothesisTree({
       <div className="tree-list">
         {nodes.map((node) => (
           <button
+            aria-pressed={selectedNodeId === node.id}
             className={[
               "tree-node",
               selectedNodeId === node.id ? "selected" : "",

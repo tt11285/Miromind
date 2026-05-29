@@ -56,11 +56,15 @@ function createInitialRun(): ResearchRun {
   };
 }
 
+const initialRun = createInitialRun();
+
 export function ResearchWorkbench() {
   const [task, setTask] = useState<ResearchTask>(defaultResearchTask);
-  const [run, setRun] = useState<ResearchRun>(() => createInitialRun());
+  const [run, setRun] = useState<ResearchRun>(initialRun);
   const [isRunning, setIsRunning] = useState(false);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>("demand-sustainability");
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
+    initialRun.nodes[0]?.id ?? null
+  );
   const [highlightedNodeIds, setHighlightedNodeIds] = useState<string[]>([]);
 
   async function handleRun() {
@@ -84,12 +88,14 @@ export function ResearchWorkbench() {
       setRun({
         task,
         rootQuestion: artifacts.rootQuestion,
-        phases: createInitialRun().phases,
+        phases: initialRun.phases,
         nodes: scored.nodes,
         evidence: artifacts.evidence,
         memo: scored.memo,
         mode: "fixture"
       });
+      setSelectedNodeId(scored.nodes[0]?.id ?? null);
+      setHighlightedNodeIds([]);
     } finally {
       setIsRunning(false);
     }

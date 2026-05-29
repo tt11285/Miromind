@@ -66,6 +66,7 @@ export function ResearchSetup({ task, isRunning, onTaskChange, onRun }: Research
         {horizons.map((horizon) => (
           <button
             key={horizon}
+            aria-pressed={task.timeHorizon === horizon}
             className={task.timeHorizon === horizon ? "active" : ""}
             onClick={() => onTaskChange({ ...task, timeHorizon: horizon })}
             type="button"
