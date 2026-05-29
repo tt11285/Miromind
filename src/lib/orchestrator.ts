@@ -6,8 +6,6 @@ import {
 } from "./researchConfig";
 import { scoreResearchArtifacts } from "./scoring";
 import type {
-  InvestmentMemo,
-  NodeConclusion,
   ResearchRun,
   ResearchTask,
   RunPhase
@@ -16,9 +14,8 @@ import type {
 export type ResearchReasoner = (input: {
   task: ResearchTask;
   rootQuestion: string;
-  nodes: NodeConclusion[];
-  memo: InvestmentMemo;
-}) => Promise<{ summary: string }> | { summary: string };
+  nodeLabels: string[];
+}) => Promise<{ summary: string }>;
 
 interface RunResearchOptions {
   reasoner?: ResearchReasoner;
@@ -69,9 +66,8 @@ export async function runResearch(
   if (options.reasoner) {
     const note = await options.reasoner({
       task,
-      rootQuestion,
-      nodes: scored.nodes,
-      memo
+      rootQuestion: artifacts.rootQuestion,
+      nodeLabels: artifacts.nodes.map((node) => node.label)
     });
     memo.sections[0] = {
       ...memo.sections[0],

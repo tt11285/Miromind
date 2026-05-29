@@ -20,12 +20,14 @@ describe("research orchestrator", () => {
   });
 
   it("uses an optional reasoner note when provided", async () => {
+    const fixtureRun = await runResearch(defaultResearchTask);
     const run = await runResearch(defaultResearchTask, {
       reasoner: async () => ({
         summary: "MiroMind confirms that valuation sensitivity is the key caveat."
       })
     });
     expect(run.mode).toBe("miromind-augmented");
+    expect(run.memo.sections[0].body).toContain(fixtureRun.memo.sections[0].body);
     expect(run.memo.sections[0].body).toContain("MiroMind confirms");
   });
 });
