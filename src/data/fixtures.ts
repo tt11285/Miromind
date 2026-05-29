@@ -12,17 +12,19 @@ interface FixtureArtifacts {
   evidence: EvidenceCard[];
 }
 
+const valuationWeights = [0.2, 0.15, 0.25, 0.2, 0.2];
+const defaultWeights = [0.22, 0.18, 0.2, 0.2, 0.2];
+
 const nodeDefaults: Array<{
   stance: NodeStance;
   confidence: HypothesisNode["confidence"];
-  weight: number;
   weightedScore: number;
 }> = [
-  { stance: "supports", confidence: "High", weight: 0.25, weightedScore: 0.22 },
-  { stance: "supports", confidence: "Medium-High", weight: 0.2, weightedScore: 0.16 },
-  { stance: "mixed", confidence: "Medium", weight: 0.2, weightedScore: 0.08 },
-  { stance: "supports", confidence: "Medium-High", weight: 0.2, weightedScore: 0.15 },
-  { stance: "weakly-refutes", confidence: "Medium", weight: 0.15, weightedScore: -0.04 }
+  { stance: "supports", confidence: "High", weightedScore: 0.22 },
+  { stance: "supports", confidence: "Medium-High", weightedScore: 0.16 },
+  { stance: "mixed", confidence: "Medium", weightedScore: 0.08 },
+  { stance: "supports", confidence: "Medium-High", weightedScore: 0.15 },
+  { stance: "weakly-refutes", confidence: "Medium", weightedScore: -0.04 }
 ];
 
 const valuationNodeClaims = [
@@ -41,17 +43,25 @@ const genericNodeClaims = [
   "Valuation or risk sensitivity determines how much evidence is already priced in."
 ];
 
+function nodeId(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 function createNodes(task: ResearchTask): HypothesisNode[] {
   const template = getQuestionTemplate(task.questionTemplateId);
   const isValuationGrowth = task.questionTemplateId === "valuation-growth";
+  const weights = isValuationGrowth ? valuationWeights : defaultWeights;
 
   return template.nodeLabels.map((label, index) => {
     const defaults = nodeDefaults[index];
     return {
-      id: `node-${index + 1}`,
+      id: nodeId(label),
       label,
       claim: isValuationGrowth ? valuationNodeClaims[index] : genericNodeClaims[index],
-      weight: defaults.weight,
+      weight: weights[index] ?? defaultWeights[index] ?? 0.2,
       stance: defaults.stance,
       confidence: defaults.confidence,
       weightedScore: defaults.weightedScore,
@@ -67,7 +77,7 @@ const nvidiaValuationEvidence: EvidenceCard[] = [
     id: "nvda-val-001",
     companyId: "nvda",
     questionTemplateId: "valuation-growth",
-    claimNodeId: "node-1",
+    claimNodeId: "revenue-growth",
     sourceTitle: "NVIDIA FY2025 Form 10-K",
     sourceType: "filing",
     sourceDate: "2025-02-26",
@@ -84,7 +94,7 @@ const nvidiaValuationEvidence: EvidenceCard[] = [
     id: "nvda-val-002",
     companyId: "nvda",
     questionTemplateId: "valuation-growth",
-    claimNodeId: "node-1",
+    claimNodeId: "revenue-growth",
     sourceTitle: "NVIDIA Q4 FY2025 Earnings Release",
     sourceType: "earnings-call",
     sourceDate: "2025-02-26",
@@ -101,7 +111,7 @@ const nvidiaValuationEvidence: EvidenceCard[] = [
     id: "nvda-val-003",
     companyId: "nvda",
     questionTemplateId: "valuation-growth",
-    claimNodeId: "node-2",
+    claimNodeId: "margin-durability",
     sourceTitle: "NVIDIA FY2025 Form 10-K",
     sourceType: "filing",
     sourceDate: "2025-02-26",
@@ -118,13 +128,13 @@ const nvidiaValuationEvidence: EvidenceCard[] = [
     id: "nvda-val-004",
     companyId: "nvda",
     questionTemplateId: "valuation-growth",
-    claimNodeId: "node-2",
+    claimNodeId: "margin-durability",
     sourceTitle: "NVIDIA Q4 FY2025 Earnings Call",
     sourceType: "earnings-call",
     sourceDate: "2025-02-26",
     quotedSnippet: "Management described Blackwell demand as strong while noting transition costs.",
     extractedFact: "The product transition can temporarily pressure margins even when demand is robust.",
-    direction: "complicates",
+    direction: "refutes",
     reliabilityScore: 0.9,
     relevanceScore: 0.86,
     freshnessScore: 0.88,
@@ -135,7 +145,7 @@ const nvidiaValuationEvidence: EvidenceCard[] = [
     id: "nvda-val-005",
     companyId: "nvda",
     questionTemplateId: "valuation-growth",
-    claimNodeId: "node-3",
+    claimNodeId: "demand-sustainability",
     sourceTitle: "Hyperscaler Capital Expenditure Commentary",
     sourceType: "industry",
     sourceDate: "2025-04-30",
@@ -152,13 +162,13 @@ const nvidiaValuationEvidence: EvidenceCard[] = [
     id: "nvda-val-006",
     companyId: "nvda",
     questionTemplateId: "valuation-growth",
-    claimNodeId: "node-3",
+    claimNodeId: "demand-sustainability",
     sourceTitle: "AI Accelerator Supply Chain Checks",
     sourceType: "industry",
     sourceDate: "2025-03-15",
     quotedSnippet: "Lead times and advanced packaging capacity remained important constraints.",
     extractedFact: "Supply chain constraints can shape revenue timing even when demand is strong.",
-    direction: "complicates",
+    direction: "refutes",
     reliabilityScore: 0.76,
     relevanceScore: 0.8,
     freshnessScore: 0.89,
@@ -169,7 +179,7 @@ const nvidiaValuationEvidence: EvidenceCard[] = [
     id: "nvda-val-007",
     companyId: "nvda",
     questionTemplateId: "valuation-growth",
-    claimNodeId: "node-4",
+    claimNodeId: "competitive-moat",
     sourceTitle: "NVIDIA Developer Ecosystem Update",
     sourceType: "industry",
     sourceDate: "2025-03-18",
@@ -186,7 +196,7 @@ const nvidiaValuationEvidence: EvidenceCard[] = [
     id: "nvda-val-008",
     companyId: "nvda",
     questionTemplateId: "valuation-growth",
-    claimNodeId: "node-4",
+    claimNodeId: "competitive-moat",
     sourceTitle: "Custom Silicon Competition Update",
     sourceType: "news",
     sourceDate: "2025-04-20",
@@ -203,7 +213,7 @@ const nvidiaValuationEvidence: EvidenceCard[] = [
     id: "nvda-val-009",
     companyId: "nvda",
     questionTemplateId: "valuation-growth",
-    claimNodeId: "node-5",
+    claimNodeId: "valuation-sensitivity",
     sourceTitle: "NVDA Market Multiple Snapshot",
     sourceType: "market-data",
     sourceDate: "2025-05-01",
@@ -220,13 +230,13 @@ const nvidiaValuationEvidence: EvidenceCard[] = [
     id: "nvda-val-010",
     companyId: "nvda",
     questionTemplateId: "valuation-growth",
-    claimNodeId: "node-5",
+    claimNodeId: "valuation-sensitivity",
     sourceTitle: "Semiconductor Cycle Risk Review",
     sourceType: "industry",
     sourceDate: "2025-04-10",
     quotedSnippet: "AI infrastructure demand can be cyclical if customer digestion periods emerge.",
     extractedFact: "A digestion phase after rapid infrastructure buildout would create multiple compression risk.",
-    direction: "complicates",
+    direction: "supports",
     reliabilityScore: 0.74,
     relevanceScore: 0.87,
     freshnessScore: 0.91,
@@ -245,7 +255,7 @@ function createGenericEvidence(task: ResearchTask): EvidenceCard[] {
       id: `${idPrefix}-001`,
       companyId: task.companyId,
       questionTemplateId: task.questionTemplateId,
-      claimNodeId: "node-1",
+      claimNodeId: nodeId(template.nodeLabels[0]),
       sourceTitle: `${company.name} Recent Operating Update`,
       sourceType: "filing",
       sourceDate: "2025-03-31",
@@ -262,7 +272,7 @@ function createGenericEvidence(task: ResearchTask): EvidenceCard[] {
       id: `${idPrefix}-002`,
       companyId: task.companyId,
       questionTemplateId: task.questionTemplateId,
-      claimNodeId: "node-3",
+      claimNodeId: nodeId(template.nodeLabels[2]),
       sourceTitle: `${company.name} Sector Demand Check`,
       sourceType: "industry",
       sourceDate: "2025-04-15",
@@ -279,7 +289,7 @@ function createGenericEvidence(task: ResearchTask): EvidenceCard[] {
       id: `${idPrefix}-003`,
       companyId: task.companyId,
       questionTemplateId: task.questionTemplateId,
-      claimNodeId: "node-5",
+      claimNodeId: nodeId(template.nodeLabels[4]),
       sourceTitle: `${company.name} Valuation and Risk Snapshot`,
       sourceType: "market-data",
       sourceDate: "2025-05-01",

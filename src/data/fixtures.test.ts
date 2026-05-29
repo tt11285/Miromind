@@ -14,6 +14,26 @@ describe("fixture artifacts", () => {
       "Competitive Moat",
       "Valuation Sensitivity"
     ]);
+    expect(artifacts.nodes.map((node) => node.id)).toEqual([
+      "revenue-growth",
+      "margin-durability",
+      "demand-sustainability",
+      "competitive-moat",
+      "valuation-sensitivity"
+    ]);
+    expect(artifacts.nodes.map((node) => node.weight)).toEqual([0.2, 0.15, 0.25, 0.2, 0.2]);
+    expect(artifacts.evidence.map((card) => [card.claimNodeId, card.direction])).toEqual([
+      ["revenue-growth", "supports"],
+      ["revenue-growth", "supports"],
+      ["margin-durability", "supports"],
+      ["margin-durability", "refutes"],
+      ["demand-sustainability", "supports"],
+      ["demand-sustainability", "refutes"],
+      ["competitive-moat", "supports"],
+      ["competitive-moat", "refutes"],
+      ["valuation-sensitivity", "refutes"],
+      ["valuation-sensitivity", "supports"]
+    ]);
     expect(artifacts.evidence.some((card) => card.direction === "refutes")).toBe(true);
   });
 
@@ -36,6 +56,11 @@ describe("fixture artifacts", () => {
         });
         expect(artifacts.nodes).toHaveLength(5);
         expect(artifacts.evidence.length).toBeGreaterThanOrEqual(3);
+        expect(artifacts.nodes.map((node) => node.weight)).toEqual(
+          questionTemplateId === "valuation-growth"
+            ? [0.2, 0.15, 0.25, 0.2, 0.2]
+            : [0.22, 0.18, 0.2, 0.2, 0.2]
+        );
       }
     }
   });
