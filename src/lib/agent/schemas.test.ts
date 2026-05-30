@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   agentRequestSchema,
+  agentEventSchema,
+  evidenceCardSchema,
   evidenceResearchOutputSchema,
   hypothesisOutputSchema,
   taskFrameOutputSchema
@@ -100,5 +102,114 @@ describe("agent schemas", () => {
     });
 
     expect(parsed.evidenceCards[0].provenanceStatus).toBe("model-reported");
+  });
+
+  it("preserves optional evidence scores", () => {
+    const parsed = evidenceCardSchema.parse({
+      id: "ev-demand-1",
+      nodeId: "demand-sustainability",
+      sourceTitle: "NVIDIA quarterly results",
+      sourceType: "earnings",
+      sourceDate: "2026-02-25",
+      urlOrReference: "https://investor.nvidia.com/",
+      provenanceStatus: "verified",
+      quotedSnippet: "Data center demand remained strong.",
+      extractedFact: "Management reported strong AI data center demand.",
+      direction: "supports",
+      reasoningImpact: "Supports the demand sustainability node.",
+      reliabilityScore: 0.9,
+      relevanceScore: 0.85,
+      freshnessScore: 0.8
+    });
+
+    expect(parsed.reliabilityScore).toBe(0.9);
+    expect(parsed.relevanceScore).toBe(0.85);
+    expect(parsed.freshnessScore).toBe(0.8);
+  });
+
+  it("validates a completed agent run event", () => {
+    const taskFrame = {
+      type: "task-frame",
+      securityName: "NVIDIA Corporation",
+      ticker: "NVDA",
+      sectorFrame: "AI accelerators and data center platforms",
+      rootQuestion: "Is NVIDIA's current valuation justified by AI growth fundamentals?",
+      researchObjective: "Assess whether AI-driven fundamentals support the current valuation.",
+      decisionCriteria: ["Revenue durability"],
+      evidenceCategories: ["Filings"],
+      safetyNote: "Research assistance only, not investment advice."
+    };
+    const scoredNodes = {
+      type: "scored-nodes",
+      nodes: [
+        {
+          id: "demand-sustainability",
+          label: "Demand Sustainability",
+          claim: "AI demand can remain strong enough to support valuation assumptions.",
+          weight: 0.24,
+          stance: "supports",
+          confidence: "Medium-High",
+          weightedScore: 0.18,
+          reasoningNote: "Evidence supports demand durability.",
+          whatWouldChange: "A sustained cloud capex slowdown.",
+          supportingEvidenceIds: ["ev-demand-1"],
+          counterEvidenceIds: []
+        }
+      ],
+      finalScore: 0.68,
+      finalStance: "Partially Supported",
+      confidence: "Medium"
+    };
+    const memo = {
+      type: "memo",
+      executiveSummary: "AI-driven fundamentals partially support the current valuation.",
+      finalStance: "Partially Supported",
+      confidence: "Medium",
+      finalScore: 0.68,
+      keyDrivers: ["Data center demand"],
+      biggestCounterargument: "Expectations may already discount durable growth.",
+      whatWouldChangeTheView: ["Evidence of demand pull-forward"],
+      humanReviewChecklist: ["Verify cited source dates"],
+      sections: [
+        {
+          id: "summary",
+          title: "Summary",
+          body: "Demand remains the central driver.",
+          linkedNodeIds: ["demand-sustainability"],
+          linkedEvidenceIds: ["ev-demand-1"]
+        }
+      ]
+    };
+
+    const parsed = agentEventSchema.parse({
+      type: "run-completed",
+      run: {
+        runId: "run-1",
+        mode: "live-agent",
+        request: {
+          security: nvdaSecurity,
+          question: "Is NVIDIA's current valuation justified by AI growth fundamentals?",
+          timeHorizon: "12M",
+          researchDepth: "deep",
+          evidencePreference: "balanced",
+          fallbackAllowed: true
+        },
+        phases: [
+          {
+            name: "Task Framing",
+            status: "complete",
+            detail: "Framed the research task."
+          }
+        ],
+        artifacts: [taskFrame, scoredNodes, memo],
+        taskFrame,
+        scoredNodes,
+        memo
+      }
+    });
+
+    expect(parsed.type).toBe("run-completed");
+    expect(parsed.run.artifacts[1].type).toBe("scored-nodes");
+    expect(parsed.run.memo?.sections[0].linkedEvidenceIds).toEqual(["ev-demand-1"]);
   });
 });
