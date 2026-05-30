@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 import { createMiroMindStageClient, parseAssistantJson } from "./miromindClient";
+import { createTaskFrameOutputSchemaForSecurity } from "./schemas";
 import {
   buildEvidenceResearchPrompt,
   buildEvidencePlanPrompt,
@@ -103,6 +104,55 @@ describe("createMiroMindStageClient", () => {
     expect(repairPrompt).toContain("Invalid response:\n{\"summary\":\"done\",\"extra\":true}");
     expect(repairPrompt).toContain("Failure detail:");
     expect(repairPrompt).toMatch(/Unrecognized key|extra/);
+  });
+
+  it("repairs task framing output that mismatches the selected security", async () => {
+    const security = {
+      name: "NVIDIA Corporation",
+      ticker: "NVDA",
+      exchange: "NASDAQ",
+      country: "US",
+      assetType: "Equity" as const
+    };
+    const taskFrameSchema = createTaskFrameOutputSchemaForSecurity(security);
+    const mismatchedTaskFrame = {
+      securityName: "Tesla, Inc.",
+      ticker: "TSLA",
+      sectorFrame: "AI accelerators and data center platforms",
+      rootQuestion: "Is NVIDIA's current valuation justified by AI growth fundamentals?",
+      researchObjective: "Assess whether AI-driven fundamentals support the current valuation.",
+      decisionCriteria: ["Revenue durability"],
+      evidenceCategories: ["Filings"],
+      safetyNote: "Research assistance only, not investment advice."
+    };
+    const repairedTaskFrame = {
+      ...mismatchedTaskFrame,
+      securityName: "NVIDIA Corporation",
+      ticker: "NVDA"
+    };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ choices: [{ message: { content: JSON.stringify(mismatchedTaskFrame) } }] })
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ choices: [{ message: { content: JSON.stringify(repairedTaskFrame) } }] })
+        )
+      );
+    const client = createMiroMindStageClient({
+      apiKey: "key",
+      model: "model",
+      baseUrl: "https://api.miromind.ai/v1",
+      fetchImpl
+    });
+
+    await expect(
+      client.completeJson("Task Framing", "prompt", taskFrameSchema)
+    ).resolves.toEqual(repairedTaskFrame);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it("throws a clear error for non-OK responses", async () => {

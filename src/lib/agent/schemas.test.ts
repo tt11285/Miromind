@@ -3,6 +3,7 @@ import type { ListedSecurity } from "./types";
 import {
   agentRequestSchema,
   agentEventSchema,
+  agentRunSchema,
   createTaskFrameOutputSchemaForSecurity,
   evidenceCardSchema,
   evidenceResearchOutputSchema,
@@ -187,6 +188,91 @@ describe("agent schemas", () => {
     expect(parsed.reliabilityScore).toBe(0.9);
     expect(parsed.relevanceScore).toBe(0.85);
     expect(parsed.freshnessScore).toBe(0.8);
+  });
+
+  it("rejects completed runs with mismatched task frame security", () => {
+    const request = {
+      security: nvdaSecurity,
+      question: "Is NVIDIA's current valuation justified by AI growth fundamentals?",
+      timeHorizon: "12M",
+      researchDepth: "deep",
+      evidencePreference: "balanced",
+      fallbackAllowed: true
+    };
+    const validTaskFrame = {
+      type: "task-frame",
+      securityName: "NVIDIA Corporation",
+      ticker: "NVDA",
+      sectorFrame: "AI accelerators and data center platforms",
+      rootQuestion: "Is NVIDIA's current valuation justified by AI growth fundamentals?",
+      researchObjective: "Assess whether AI-driven fundamentals support the current valuation.",
+      decisionCriteria: ["Revenue durability"],
+      evidenceCategories: ["Filings"],
+      safetyNote: "Research assistance only, not investment advice."
+    };
+    const mismatchedTickerFrame = {
+      ...validTaskFrame,
+      ticker: "TSLA"
+    };
+    const mismatchedNameFrame = {
+      ...validTaskFrame,
+      securityName: "NVIDIA"
+    };
+
+    const topLevelMismatch = agentRunSchema.safeParse({
+      runId: "run-1",
+      mode: "live-agent",
+      request,
+      phases: [],
+      artifacts: [validTaskFrame],
+      taskFrame: mismatchedTickerFrame
+    });
+    const artifactMismatch = agentRunSchema.safeParse({
+      runId: "run-1",
+      mode: "live-agent",
+      request,
+      phases: [],
+      artifacts: [mismatchedNameFrame],
+      taskFrame: validTaskFrame
+    });
+
+    expect(topLevelMismatch.success).toBe(false);
+    expect(artifactMismatch.success).toBe(false);
+  });
+
+  it("rejects run-completed events with mismatched task frame security", () => {
+    const mismatchedTaskFrame = {
+      type: "task-frame",
+      securityName: "NVIDIA Corporation",
+      ticker: "TSLA",
+      sectorFrame: "AI accelerators and data center platforms",
+      rootQuestion: "Is NVIDIA's current valuation justified by AI growth fundamentals?",
+      researchObjective: "Assess whether AI-driven fundamentals support the current valuation.",
+      decisionCriteria: ["Revenue durability"],
+      evidenceCategories: ["Filings"],
+      safetyNote: "Research assistance only, not investment advice."
+    };
+
+    const result = agentEventSchema.safeParse({
+      type: "run-completed",
+      run: {
+        runId: "run-1",
+        mode: "live-agent",
+        request: {
+          security: nvdaSecurity,
+          question: "Is NVIDIA's current valuation justified by AI growth fundamentals?",
+          timeHorizon: "12M",
+          researchDepth: "deep",
+          evidencePreference: "balanced",
+          fallbackAllowed: true
+        },
+        phases: [],
+        artifacts: [mismatchedTaskFrame],
+        taskFrame: mismatchedTaskFrame
+      }
+    });
+
+    expect(result.success).toBe(false);
   });
 
   it("validates a completed agent run event", () => {

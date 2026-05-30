@@ -228,6 +228,29 @@ export const agentArtifactSchema = z.discriminatedUnion("type", [
   memoArtifactSchema
 ]);
 
+function addTaskFrameSecurityIssues(
+  context: z.RefinementCtx,
+  path: (string | number)[],
+  taskFrame: z.infer<typeof taskFrameArtifactSchema>,
+  security: ListedSecurity
+) {
+  if (taskFrame.securityName !== security.name) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [...path, "securityName"],
+      message: `task frame securityName must exactly match request.security.name: ${security.name}`
+    });
+  }
+
+  if (taskFrame.ticker !== security.ticker) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [...path, "ticker"],
+      message: `task frame ticker must exactly match request.security.ticker: ${security.ticker}`
+    });
+  }
+}
+
 export const agentRunSchema = z.object({
   runId: z.string().min(1),
   mode: agentModeSchema,
@@ -240,7 +263,27 @@ export const agentRunSchema = z.object({
   evidenceCards: z.array(evidenceCardSchema).optional(),
   scoredNodes: scoredNodesArtifactSchema.optional(),
   memo: memoArtifactSchema.optional()
-}).strict();
+}).strict().superRefine((run, context) => {
+  if (run.taskFrame) {
+    addTaskFrameSecurityIssues(
+      context,
+      ["taskFrame"],
+      run.taskFrame,
+      run.request.security
+    );
+  }
+
+  run.artifacts.forEach((artifact, index) => {
+    if (artifact.type === "task-frame") {
+      addTaskFrameSecurityIssues(
+        context,
+        ["artifacts", index],
+        artifact,
+        run.request.security
+      );
+    }
+  });
+});
 
 export const agentEventSchema = z.discriminatedUnion("type", [
   z.object({
