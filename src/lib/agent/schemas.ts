@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ListedSecurity } from "./types";
 
 export const agentModeSchema = z.enum(["live-agent", "demo-fallback"]);
 export const phaseStatusSchema = z.enum(["queued", "running", "complete", "failed"]);
@@ -74,6 +75,26 @@ export const taskFrameOutputSchema = z.object({
   evidenceCategories: z.array(z.string().min(1)).min(1),
   safetyNote: z.string().min(1)
 }).strict();
+
+export function createTaskFrameOutputSchemaForSecurity(security: ListedSecurity) {
+  return taskFrameOutputSchema.superRefine((value, context) => {
+    if (value.securityName !== security.name) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["securityName"],
+        message: `securityName must exactly match selected security.name: ${security.name}`
+      });
+    }
+
+    if (value.ticker !== security.ticker) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["ticker"],
+        message: `ticker must exactly match selected security.ticker: ${security.ticker}`
+      });
+    }
+  });
+}
 
 export const taskFrameArtifactSchema = taskFrameOutputSchema.extend({
   type: z.literal("task-frame")

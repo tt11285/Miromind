@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
+import type { ListedSecurity } from "./types";
 import {
   agentRequestSchema,
   agentEventSchema,
+  createTaskFrameOutputSchemaForSecurity,
   evidenceCardSchema,
   evidenceResearchOutputSchema,
   hypothesisOutputSchema,
   taskFrameOutputSchema
 } from "./schemas";
 
-const nvdaSecurity = {
+const nvdaSecurity: ListedSecurity = {
   name: "NVIDIA Corporation",
   ticker: "NVDA",
   exchange: "NASDAQ",
@@ -71,6 +73,52 @@ describe("agent schemas", () => {
     });
 
     expect(parsed.ticker).toBe("NVDA");
+  });
+
+  it("validates task framing output against the selected security", () => {
+    const schema = createTaskFrameOutputSchemaForSecurity(nvdaSecurity);
+
+    const parsed = schema.parse({
+      securityName: "NVIDIA Corporation",
+      ticker: "NVDA",
+      sectorFrame: "AI accelerators and data center platforms",
+      rootQuestion: "Is NVIDIA's current valuation justified by AI growth fundamentals?",
+      researchObjective: "Assess whether AI-driven fundamentals support the current valuation.",
+      decisionCriteria: ["Revenue durability", "Margin durability"],
+      evidenceCategories: ["Filings", "Earnings calls", "Market data"],
+      safetyNote: "Research assistance only, not investment advice."
+    });
+
+    expect(parsed.securityName).toBe("NVIDIA Corporation");
+    expect(parsed.ticker).toBe("NVDA");
+  });
+
+  it("rejects task framing output with a mismatched selected security", () => {
+    const schema = createTaskFrameOutputSchemaForSecurity(nvdaSecurity);
+
+    const wrongTicker = schema.safeParse({
+      securityName: "NVIDIA Corporation",
+      ticker: "TSLA",
+      sectorFrame: "AI accelerators and data center platforms",
+      rootQuestion: "Is NVIDIA's current valuation justified by AI growth fundamentals?",
+      researchObjective: "Assess whether AI-driven fundamentals support the current valuation.",
+      decisionCriteria: ["Revenue durability"],
+      evidenceCategories: ["Filings"],
+      safetyNote: "Research assistance only, not investment advice."
+    });
+    const wrongName = schema.safeParse({
+      securityName: "NVIDIA",
+      ticker: "NVDA",
+      sectorFrame: "AI accelerators and data center platforms",
+      rootQuestion: "Is NVIDIA's current valuation justified by AI growth fundamentals?",
+      researchObjective: "Assess whether AI-driven fundamentals support the current valuation.",
+      decisionCriteria: ["Revenue durability"],
+      evidenceCategories: ["Filings"],
+      safetyNote: "Research assistance only, not investment advice."
+    });
+
+    expect(wrongTicker.success).toBe(false);
+    expect(wrongName.success).toBe(false);
   });
 
   it("validates generated hypothesis nodes", () => {

@@ -68,9 +68,9 @@ const evidenceResearchShape = `EvidenceResearchOutput fields:
       "extractedFact": string,
       "direction": "supports" | "refutes" | "complicates",
       "reasoningImpact": string,
-      "reliabilityScore": number | undefined,
-      "relevanceScore": number | undefined,
-      "freshnessScore": number | undefined
+      "reliabilityScore": optional number,
+      "relevanceScore": optional number,
+      "freshnessScore": optional number
     }
   ]
 }`;
@@ -138,6 +138,7 @@ export function buildEvidenceResearchPrompt(plan: EvidencePlanArtifact): string 
     evidenceResearchShape,
     `Evidence plan: ${JSON.stringify(plan)}`,
     "Return evidence cards with provenanceStatus set to verified, model-reported, or unavailable.",
+    "Omit optional score fields when unavailable; do not return null or placeholder values for scores.",
     "Do not invent a URL. If the source cannot be verified, use provenanceStatus unavailable or model-reported."
   ].join("\n");
 }

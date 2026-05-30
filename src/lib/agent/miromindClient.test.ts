@@ -2,6 +2,7 @@ import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 import { createMiroMindStageClient, parseAssistantJson } from "./miromindClient";
 import {
+  buildEvidenceResearchPrompt,
   buildEvidencePlanPrompt,
   buildTaskFramePrompt
 } from "./prompts";
@@ -207,5 +208,27 @@ describe("prompt contracts", () => {
     expect(prompt).toContain('"items":');
     expect(prompt).toContain('"nodes":[');
     expect(prompt).toContain('"id":"demand"');
+  });
+
+  it("describes evidence scores as optional numbers omitted when unavailable", () => {
+    const prompt = buildEvidenceResearchPrompt({
+      type: "evidence-plan",
+      items: [
+        {
+          nodeId: "demand",
+          researchQuestions: ["What supports durable demand?"],
+          preferredSourceTypes: ["earnings"],
+          sourceCandidates: ["Company earnings call"],
+          supportingSignals: ["Raised guidance"],
+          refutingSignals: ["Order delays"]
+        }
+      ]
+    });
+
+    expect(prompt).toContain('"reliabilityScore": optional number');
+    expect(prompt).toContain('"relevanceScore": optional number');
+    expect(prompt).toContain('"freshnessScore": optional number');
+    expect(prompt).toContain("Omit optional score fields when unavailable");
+    expect(prompt).not.toContain("undefined");
   });
 });
