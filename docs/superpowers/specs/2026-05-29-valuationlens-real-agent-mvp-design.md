@@ -14,7 +14,7 @@ However, it is not yet a real agent. The current app is fixture-first:
 - MiroMind, when enabled manually through the API, only appends a short summary and does not generate the research chain.
 - The visible UI behaves like a dashboard of prepared knowledge rather than an agent actively doing research.
 
-This spec replaces that direction with a Real Agent MVP: the user enters a company and a research question, clicks one button, and the middle and right columns show a live MiroMind-driven research process as it decomposes the question, forms hypotheses, gathers evidence, scores evidence, and synthesizes a memo.
+This spec replaces that direction with a Real Agent MVP: the user searches for and selects a listed security, enters a research question, clicks one button, and the middle and right columns show a live MiroMind-driven research process as it decomposes the question, forms hypotheses, gathers evidence, scores evidence, and synthesizes a memo.
 
 ## 2. Product Positioning
 
@@ -32,7 +32,7 @@ The MVP should make the app unmistakably feel like an agent, not a board.
 
 Success means:
 
-1. The user can type a company and a custom research question.
+1. The user can search by company name or ticker, select a listed public equity, and type a custom research question.
 2. Clicking `Run Deep Research` starts a live run.
 3. The UI visibly progresses through multiple agent stages.
 4. MiroMind is called by default when `MIROMIND_API_KEY` is configured.
