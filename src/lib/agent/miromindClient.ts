@@ -13,6 +13,14 @@ interface ChatCompletionResponse {
   choices?: Array<{ message?: { content?: string | null } }>;
 }
 
+function formatFailure(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+}
+
 export function parseAssistantJson(text: string): unknown {
   const trimmed = text.trim();
   const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
@@ -60,20 +68,34 @@ export function createMiroMindStageClient(
       schema: ZodSchema<T>
     ): Promise<T> {
       const firstContent = await requestContent(prompt);
+      let firstFailure = "";
       try {
         return schema.parse(parseAssistantJson(firstContent));
-      } catch {
+      } catch (error) {
+        firstFailure = formatFailure(error);
         const repairPrompt = [
-          "Repair the previous response so it is valid JSON only.",
+          `Repair the previous response so it is valid JSON matching the ${stageName} schema/contract.`,
           `Stage: ${stageName}`,
           "Do not add markdown.",
           "Original prompt:",
           prompt,
           "Invalid response:",
-          firstContent
+          firstContent,
+          "Failure detail:",
+          firstFailure
         ].join("\n");
-        const repairedContent = await requestContent(repairPrompt);
-        return schema.parse(parseAssistantJson(repairedContent));
+        try {
+          const repairedContent = await requestContent(repairPrompt);
+          return schema.parse(parseAssistantJson(repairedContent));
+        } catch (repairError) {
+          throw new Error(
+            [
+              `MiroMind ${stageName} response repair failed.`,
+              `Original failure: ${firstFailure}`,
+              `Repair failure: ${formatFailure(repairError)}`
+            ].join("\n")
+          );
+        }
       }
     }
   };
