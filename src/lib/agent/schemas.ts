@@ -47,7 +47,7 @@ export const listedSecuritySchema = z.object({
   exchange: z.string().min(1),
   country: z.string().min(1),
   assetType: z.literal("Equity")
-});
+}).strict();
 
 export const agentRequestSchema = z.object({
   security: listedSecuritySchema,
@@ -56,13 +56,13 @@ export const agentRequestSchema = z.object({
   researchDepth: z.enum(["fast", "deep"]),
   evidencePreference: z.enum(["balanced", "financials", "earnings", "news"]),
   fallbackAllowed: z.boolean()
-});
+}).strict();
 
 export const agentPhaseSchema = z.object({
   name: agentPhaseNameSchema,
   status: phaseStatusSchema,
   detail: z.string()
-});
+}).strict();
 
 export const taskFrameOutputSchema = z.object({
   securityName: z.string().min(1),
@@ -73,11 +73,11 @@ export const taskFrameOutputSchema = z.object({
   decisionCriteria: z.array(z.string().min(1)).min(1),
   evidenceCategories: z.array(z.string().min(1)).min(1),
   safetyNote: z.string().min(1)
-});
+}).strict();
 
 export const taskFrameArtifactSchema = taskFrameOutputSchema.extend({
   type: z.literal("task-frame")
-});
+}).strict();
 
 export const hypothesisNodeDraftSchema = z.object({
   id: z.string().min(1),
@@ -87,16 +87,16 @@ export const hypothesisNodeDraftSchema = z.object({
   weight: z.number().positive(),
   evidenceNeeded: z.array(z.string().min(1)).min(1),
   counterEvidenceNeeded: z.array(z.string().min(1)).min(1)
-});
+}).strict();
 
 export const hypothesisOutputSchema = z.object({
   rootQuestion: z.string().min(1),
   nodes: z.array(hypothesisNodeDraftSchema).min(4).max(7)
-});
+}).strict();
 
 export const hypothesisTreeArtifactSchema = hypothesisOutputSchema.extend({
   type: z.literal("hypothesis-tree")
-});
+}).strict();
 
 export const evidencePlanOutputSchema = z.object({
   items: z.array(
@@ -107,13 +107,13 @@ export const evidencePlanOutputSchema = z.object({
       sourceCandidates: z.array(z.string()),
       supportingSignals: z.array(z.string().min(1)).min(1),
       refutingSignals: z.array(z.string().min(1)).min(1)
-    })
+    }).strict()
   ).min(1)
-});
+}).strict();
 
 export const evidencePlanArtifactSchema = evidencePlanOutputSchema.extend({
   type: z.literal("evidence-plan")
-});
+}).strict();
 
 export const evidenceCardSchema = z.object({
   id: z.string().min(1),
@@ -130,15 +130,15 @@ export const evidenceCardSchema = z.object({
   reliabilityScore: z.number().optional(),
   relevanceScore: z.number().optional(),
   freshnessScore: z.number().optional()
-});
+}).strict();
 
 export const evidenceResearchOutputSchema = z.object({
   evidenceCards: z.array(evidenceCardSchema).min(1)
-});
+}).strict();
 
 export const evidenceCardsArtifactSchema = evidenceResearchOutputSchema.extend({
   type: z.literal("evidence-cards")
-});
+}).strict();
 
 export const scoredNodeSchema = z.object({
   id: z.string().min(1),
@@ -152,7 +152,7 @@ export const scoredNodeSchema = z.object({
   whatWouldChange: z.string().min(1),
   supportingEvidenceIds: z.array(z.string().min(1)),
   counterEvidenceIds: z.array(z.string().min(1))
-});
+}).strict();
 
 export const scoredNodesArtifactSchema = z.object({
   type: z.literal("scored-nodes"),
@@ -160,7 +160,7 @@ export const scoredNodesArtifactSchema = z.object({
   finalScore: z.number(),
   finalStance: finalStanceSchema,
   confidence: confidenceSchema
-});
+}).strict();
 
 export const memoSectionArtifactSchema = z.object({
   id: z.string().min(1),
@@ -168,7 +168,7 @@ export const memoSectionArtifactSchema = z.object({
   body: z.string().min(1),
   linkedNodeIds: z.array(z.string().min(1)),
   linkedEvidenceIds: z.array(z.string().min(1))
-});
+}).strict();
 
 export const memoArtifactSchema = z.object({
   type: z.literal("memo"),
@@ -181,7 +181,7 @@ export const memoArtifactSchema = z.object({
   whatWouldChangeTheView: z.array(z.string().min(1)).min(1),
   humanReviewChecklist: z.array(z.string().min(1)).min(1),
   sections: z.array(memoSectionArtifactSchema).min(1)
-});
+}).strict();
 
 export const synthesisOutputSchema = z.object({
   executiveSummary: z.string().min(1),
@@ -194,9 +194,9 @@ export const synthesisOutputSchema = z.object({
   sections: z.array(
     memoSectionArtifactSchema.extend({
       linkedNodeIds: z.array(z.string().min(1)).min(1)
-    })
+    }).strict()
   ).min(1)
-});
+}).strict();
 
 export const agentArtifactSchema = z.discriminatedUnion("type", [
   taskFrameArtifactSchema,
@@ -219,42 +219,42 @@ export const agentRunSchema = z.object({
   evidenceCards: z.array(evidenceCardSchema).optional(),
   scoredNodes: scoredNodesArtifactSchema.optional(),
   memo: memoArtifactSchema.optional()
-});
+}).strict();
 
 export const agentEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("run-started"),
     runId: z.string().min(1),
     mode: agentModeSchema
-  }),
+  }).strict(),
   z.object({
     type: z.literal("phase-started"),
     phase: agentPhaseNameSchema,
     detail: z.string()
-  }),
+  }).strict(),
   z.object({
     type: z.literal("artifact"),
     artifact: agentArtifactSchema
-  }),
+  }).strict(),
   z.object({
     type: z.literal("phase-completed"),
     phase: agentPhaseNameSchema,
     detail: z.string()
-  }),
+  }).strict(),
   z.object({
     type: z.literal("phase-failed"),
     phase: agentPhaseNameSchema,
     error: z.string().min(1)
-  }),
+  }).strict(),
   z.object({
     type: z.literal("run-completed"),
     run: agentRunSchema
-  }),
+  }).strict(),
   z.object({
     type: z.literal("run-failed"),
     error: z.string().min(1),
     fallbackAvailable: z.boolean()
-  })
+  }).strict()
 ]);
 
 export type AgentRequestInput = z.infer<typeof agentRequestSchema>;

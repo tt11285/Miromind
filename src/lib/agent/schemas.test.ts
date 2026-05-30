@@ -44,6 +44,20 @@ describe("agent schemas", () => {
     expect(result.success).toBe(false);
   });
 
+  it("rejects unknown fields on selected listed security requests", () => {
+    const result = agentRequestSchema.safeParse({
+      security: nvdaSecurity,
+      company: "NVIDIA",
+      question: "Is NVIDIA's current valuation justified by AI growth fundamentals?",
+      timeHorizon: "12M",
+      researchDepth: "deep",
+      evidencePreference: "balanced",
+      fallbackAllowed: true
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it("validates task framing output", () => {
     const parsed = taskFrameOutputSchema.parse({
       securityName: "NVIDIA Corporation",
@@ -214,5 +228,16 @@ describe("agent schemas", () => {
 
     expect(parsed.run.artifacts[1].type).toBe("scored-nodes");
     expect(parsed.run.memo?.sections[0].linkedEvidenceIds).toEqual(["ev-demand-1"]);
+  });
+
+  it("rejects unknown fields on agent events", () => {
+    const result = agentEventSchema.safeParse({
+      type: "phase-started",
+      phase: "Task Framing",
+      detail: "Framing the task.",
+      unexpected: "silently stripped before strict validation"
+    });
+
+    expect(result.success).toBe(false);
   });
 });
