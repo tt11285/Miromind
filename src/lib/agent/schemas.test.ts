@@ -208,7 +208,10 @@ describe("agent schemas", () => {
       }
     });
 
-    expect(parsed.type).toBe("run-completed");
+    if (parsed.type !== "run-completed") {
+      throw new Error(`Expected run-completed event, received ${parsed.type}`);
+    }
+
     expect(parsed.run.artifacts[1].type).toBe("scored-nodes");
     expect(parsed.run.memo?.sections[0].linkedEvidenceIds).toEqual(["ev-demand-1"]);
   });
