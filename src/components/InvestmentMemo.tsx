@@ -1,7 +1,7 @@
-import type { InvestmentMemo } from "@/lib/types";
+import type { MemoArtifact } from "@/lib/agent/types";
 
 interface InvestmentMemoProps {
-  memo: InvestmentMemo;
+  memo: MemoArtifact;
   onSectionSelect: (nodeIds: string[]) => void;
 }
 

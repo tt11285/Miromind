@@ -25,6 +25,7 @@ body {
 }
 
 button,
+input,
 select {
   font: inherit;
 }
@@ -114,6 +115,64 @@ select {
   padding: 10px 12px;
 }
 
+input,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--ink);
+  font: inherit;
+  padding: 10px 12px;
+}
+
+textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.quick-chip-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.quick-chip-row button,
+.search-results button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.quick-chip-row button {
+  background: #fff;
+  color: var(--blue);
+  font-weight: 800;
+  padding: 9px 8px;
+}
+
+.search-results {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+}
+
+.search-results button {
+  background: #fff;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  text-align: left;
+}
+
+.search-results span,
+.timeline-step small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .segmented {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -182,6 +241,24 @@ select {
   display: grid;
   grid-template-columns: 28px 1fr;
   gap: 10px;
+}
+
+.timeline-step.running .step-index {
+  background: #eef5ff;
+  color: var(--blue);
+}
+
+.timeline-step.failed .step-index,
+.error-panel {
+  background: #fff2f0;
+  color: var(--red);
+}
+
+.error-panel {
+  border: 1px solid #fecdca;
+  border-radius: 8px;
+  margin: 12px 0;
+  padding: 12px;
 }
 
 .step-index {

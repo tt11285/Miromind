@@ -1,5 +1,5 @@
-import { ResearchWorkbench } from "@/components/ResearchWorkbench";
+import { LiveResearchWorkbench } from "@/components/LiveResearchWorkbench";
 
 export default function HomePage() {
-  return <ResearchWorkbench />;
+  return <LiveResearchWorkbench />;
 }

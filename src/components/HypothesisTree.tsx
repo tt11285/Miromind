@@ -1,7 +1,7 @@
-import type { NodeConclusion } from "@/lib/types";
+import type { HypothesisNodeDraft } from "@/lib/agent/types";
 
 interface HypothesisTreeProps {
-  nodes: NodeConclusion[];
+  nodes: HypothesisNodeDraft[];
   highlightedNodeIds: string[];
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
@@ -33,10 +33,10 @@ export function HypothesisTree({
             type="button"
           >
             <span>{node.label}</span>
-            <strong>{node.stance}</strong>
+            <strong>{Math.round(node.weight * 100)}% weight</strong>
             <small>
-              {node.confidence} confidence | {node.supportingEvidence.length} for |{" "}
-              {node.counterEvidence.length} against
+              {node.evidenceNeeded.length} evidence needs |{" "}
+              {node.counterEvidenceNeeded.length} counter checks
             </small>
           </button>
         ))}

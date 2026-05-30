@@ -1,13 +1,15 @@
-import type { EvidenceCard, NodeConclusion } from "@/lib/types";
+import type { AgentEvidenceCard, HypothesisNodeDraft } from "@/lib/agent/types";
 
 interface EvidencePanelProps {
-  node: NodeConclusion | null;
-  evidence: EvidenceCard[];
+  selectedNodeId: string | null;
+  nodes: HypothesisNodeDraft[];
+  evidence: AgentEvidenceCard[];
 }
 
-export function EvidencePanel({ node, evidence }: EvidencePanelProps) {
-  const visibleEvidence = node
-    ? evidence.filter((card) => card.claimNodeId === node.id)
+export function EvidencePanel({ selectedNodeId, nodes, evidence }: EvidencePanelProps) {
+  const node = nodes.find((item) => item.id === selectedNodeId) ?? null;
+  const selectedEvidence = node
+    ? evidence.filter((card) => card.nodeId === node.id)
     : evidence.slice(0, 4);
 
   return (
@@ -18,14 +20,14 @@ export function EvidencePanel({ node, evidence }: EvidencePanelProps) {
       </div>
       {node ? (
         <div className="reasoning-note">
-          <strong>Reasoning Note</strong>
-          <p>{node.reasoningNote}</p>
+          <strong>Why It Matters</strong>
+          <p>{node.whyItMatters}</p>
           <strong>What Would Change</strong>
-          <p>{node.whatWouldChange}</p>
+          <p>{node.counterEvidenceNeeded.join("; ")}</p>
         </div>
       ) : null}
       <div className="evidence-list">
-        {visibleEvidence.map((card) => (
+        {selectedEvidence.map((card) => (
           <article className={`evidence-card ${card.direction}`} key={card.id}>
             <div>
               <strong>{card.sourceTitle}</strong>
