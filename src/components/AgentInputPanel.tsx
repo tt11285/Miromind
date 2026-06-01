@@ -15,7 +15,7 @@ interface AgentInputPanelProps {
   onRun: (request: AgentRequest) => void;
 }
 
-const defaultQuestion =
+const exampleQuestion =
   "Is NVIDIA's current valuation justified by AI growth fundamentals?";
 
 const demoSecurities: Array<ListedSecurity & { displayName: string }> = [
@@ -61,7 +61,7 @@ export function AgentInputPanel({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ListedSecurity[]>([]);
   const [security, setSecurity] = useState<ListedSecurity | null>(null);
-  const [question, setQuestion] = useState(defaultQuestion);
+  const [question, setQuestion] = useState("");
   const [timeHorizon, setTimeHorizon] = useState<TimeHorizon>("12M");
   const [researchDepth, setResearchDepth] = useState<ResearchDepth>("deep");
   const [evidencePreference, setEvidencePreference] =
@@ -139,7 +139,11 @@ export function AgentInputPanel({
 
       <label>
         Research question
-        <textarea value={question} onChange={(event) => setQuestion(event.target.value)} />
+        <textarea
+          value={question}
+          onChange={(event) => setQuestion(event.target.value)}
+          placeholder={`Example: ${exampleQuestion}`}
+        />
       </label>
 
       <label>

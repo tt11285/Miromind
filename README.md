@@ -37,13 +37,27 @@ ValuationLens follows a seven-stage workflow:
 
 ## Live Agent Setup
 
-Create `.env.local`:
+MiroMind live research requires a server-side API key. Without a real
+`MIROMIND_API_KEY`, the app still opens, but arbitrary companies and questions
+will not run live research. The no-key path only supports the clearly labeled
+NVIDIA curated Demo Fallback.
+
+Copy the template:
 
 ```bash
-MIROMIND_API_KEY=your_key_here
+cp .env.local.example .env.local
+```
+
+Then edit `.env.local`:
+
+```bash
+MIROMIND_API_KEY=your_real_miromind_api_key
 MIROMIND_MODEL=gpt-oss-120b
 MIROMIND_BASE_URL=https://api.miromind.ai/v1
 ```
+
+Do not leave the placeholder value in `.env.local`; the app treats any non-empty
+key as an attempt to call MiroMind.
 
 When `MIROMIND_API_KEY` is present, ValuationLens runs in Live Agent mode and streams MiroMind-backed research stages. Without the key, the app only uses clearly labeled Demo Fallback mode for curated demo tasks.
 

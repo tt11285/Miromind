@@ -28,6 +28,12 @@ describe("AgentInputPanel", () => {
 
     render(<AgentInputPanel isRunning={false} modeLabel="Live Agent" onRun={onRun} />);
 
+    const questionBox = screen.getByLabelText("Research question");
+    expect(questionBox).toHaveValue("");
+    expect(questionBox).toHaveAttribute(
+      "placeholder",
+      "Example: Is NVIDIA's current valuation justified by AI growth fundamentals?"
+    );
     expect(screen.getByRole("button", { name: "Run Deep Research" })).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText("Company or ticker"), {
@@ -35,8 +41,9 @@ describe("AgentInputPanel", () => {
     });
     await waitFor(() => expect(screen.getByText("NVIDIA Corporation")).toBeInTheDocument());
     fireEvent.click(screen.getByText("NVIDIA Corporation"));
+    expect(screen.getByRole("button", { name: "Run Deep Research" })).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText("Research question"), {
+    fireEvent.change(questionBox, {
       target: {
         value: "Is NVIDIA's current valuation justified by AI growth fundamentals?"
       }

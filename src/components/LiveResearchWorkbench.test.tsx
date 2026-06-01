@@ -127,6 +127,11 @@ describe("LiveResearchWorkbench", () => {
     });
     await waitFor(() => expect(screen.getByText("NVIDIA Corporation")).toBeInTheDocument());
     fireEvent.click(screen.getByText("NVIDIA Corporation"));
+    fireEvent.change(screen.getByLabelText("Research question"), {
+      target: {
+        value: "Is NVIDIA's current valuation justified by AI growth fundamentals?"
+      }
+    });
     fireEvent.click(screen.getByRole("button", { name: "Run Deep Research" }));
 
     expect(await screen.findByText("Partially Supported")).toBeInTheDocument();

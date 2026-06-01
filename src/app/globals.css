@@ -126,6 +126,11 @@ textarea {
   padding: 10px 12px;
 }
 
+input::placeholder,
+textarea::placeholder {
+  color: #98a2b3;
+}
+
 textarea {
   min-height: 96px;
   resize: vertical;
