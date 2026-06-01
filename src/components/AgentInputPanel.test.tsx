@@ -34,6 +34,9 @@ describe("AgentInputPanel", () => {
       "placeholder",
       "Example: Is NVIDIA's current valuation justified by AI growth fundamentals?"
     );
+    expect(
+      screen.getByText("Select a listed company and enter a research question to run.")
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run Deep Research" })).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText("Company or ticker"), {
@@ -41,6 +44,7 @@ describe("AgentInputPanel", () => {
     });
     await waitFor(() => expect(screen.getByText("NVIDIA Corporation")).toBeInTheDocument());
     fireEvent.click(screen.getByText("NVIDIA Corporation"));
+    expect(screen.getByText("Enter a research question to run.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run Deep Research" })).toBeDisabled();
 
     fireEvent.change(questionBox, {

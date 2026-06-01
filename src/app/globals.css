@@ -210,6 +210,20 @@ textarea {
   font-weight: 800;
 }
 
+.primary-action:disabled {
+  background: #d0d5dd;
+  border-color: #d0d5dd;
+  color: #667085;
+  cursor: not-allowed;
+}
+
+.run-help {
+  margin: -4px 0 0;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .workspace {
   min-width: 0;
   overflow: auto;

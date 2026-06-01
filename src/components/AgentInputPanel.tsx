@@ -87,6 +87,11 @@ export function AgentInputPanel({
   }
 
   const canRun = Boolean(security) && question.trim().length > 0 && !isRunning;
+  const runHelpText = !security
+    ? "Select a listed company and enter a research question to run."
+    : !question.trim()
+      ? "Enter a research question to run."
+      : "Ready to run.";
 
   return (
     <section className="setup-panel" aria-label="Agent input">
@@ -184,9 +189,17 @@ export function AgentInputPanel({
         </select>
       </label>
 
+      {!canRun ? (
+        <p className="run-help" id="run-help">
+          {runHelpText}
+        </p>
+      ) : null}
+
       <button
+        aria-describedby={!canRun ? "run-help" : undefined}
         className="primary-action"
         disabled={!canRun}
+        title={!canRun ? runHelpText : undefined}
         onClick={() =>
           security &&
           onRun({
