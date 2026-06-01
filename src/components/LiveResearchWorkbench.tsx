@@ -1,14 +1,16 @@
 "use client";
 
-import { parseJsonLines } from "@/lib/agent/streamClient";
+import pLimit from "p-limit";
 import type {
-  AgentEvent,
+  AgentEvidenceCard,
   AgentPhase,
   AgentRequest,
   AgentTelemetryMetric,
   EvidenceCardsArtifact,
+  EvidencePlanArtifact,
   HypothesisTreeArtifact,
-  MemoArtifact
+  MemoArtifact,
+  TaskFrameArtifact
 } from "@/lib/agent/types";
 import { useEffect, useState } from "react";
 import { AgentInputPanel } from "./AgentInputPanel";
@@ -18,6 +20,22 @@ import { HypothesisTree } from "./HypothesisTree";
 import { InvestmentMemo } from "./InvestmentMemo";
 
 type WorkbenchStage = "intro" | "launching" | "running" | "complete" | "error";
+
+interface PlanResponse {
+  taskFrame: TaskFrameArtifact;
+  hypothesisTree: HypothesisTreeArtifact;
+  evidencePlan: EvidencePlanArtifact;
+}
+
+interface EvidenceTaskResponse {
+  evidenceCards: AgentEvidenceCard[];
+  telemetry?: AgentTelemetryMetric[];
+}
+
+interface SynthesisResponse {
+  memo: MemoArtifact;
+  telemetry?: AgentTelemetryMetric[];
+}
 
 type DragState = {
   handle: "agent" | "trace";
@@ -133,6 +151,24 @@ async function extractErrorMessage(response: Response): Promise<string> {
   }
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response));
+  }
+
+  return response.json() as Promise<T>;
+}
+
 export function LiveResearchWorkbench() {
   const [modeLabel, setModeLabel] =
     useState<"Live Agent" | "Demo Fallback" | "Error">("Demo Fallback");
@@ -232,25 +268,54 @@ export function LiveResearchWorkbench() {
 
     try {
       const cleanedRequest = sanitizeAgentRequest(request);
-      const response = await fetch("/api/research/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(cleanedRequest)
+      setModeLabel("Live Agent");
+
+      updatePhase("Task Framing", "running", "Reading the question and framing the decision.");
+      const plan = await postJson<PlanResponse>("/api/research/plan", cleanedRequest);
+      updatePhase("Task Framing", "complete", "Research task framed.");
+
+      updatePhase("Hypothesis Generation", "running", "Building the hypothesis tree.");
+      setTree(plan.hypothesisTree);
+      setSelectedNodeId(plan.hypothesisTree.nodes[0]?.id ?? null);
+      updatePhase("Hypothesis Generation", "complete", "Hypothesis tree generated.");
+
+      updatePhase("Evidence Planning", "running", "Planning source checks.");
+      updatePhase("Evidence Planning", "complete", "Evidence plan generated.");
+
+      updatePhase(
+        "Evidence Research",
+        "running",
+        `Running ${plan.evidencePlan.items.length} evidence tasks with 2 concurrent workers.`
+      );
+      const evidenceCards = await runEvidenceQueue(cleanedRequest, plan.evidencePlan);
+      const evidenceArtifact: EvidenceCardsArtifact = {
+        type: "evidence-cards",
+        evidenceCards
+      };
+      setEvidence(evidenceArtifact);
+      updatePhase(
+        "Evidence Research",
+        "complete",
+        `All ${plan.evidencePlan.items.length} evidence tasks returned successfully.`
+      );
+
+      updatePhase("Evidence Scoring", "running", "Scoring evidence and node conclusions.");
+      const synthesis = await postJson<SynthesisResponse>("/api/research/synthesis", {
+        request: cleanedRequest,
+        taskFrame: plan.taskFrame,
+        hypothesisTree: plan.hypothesisTree,
+        evidenceCards
       });
+      appendTelemetry(synthesis.telemetry);
+      updatePhase("Evidence Scoring", "complete", "Evidence scored.");
 
-      if (!response.ok) {
-        handleRunFailure(await extractErrorMessage(response));
-        return;
-      }
+      updatePhase("Reasoning Synthesis", "running", "Synthesizing the investment memo.");
+      setMemo(synthesis.memo);
+      updatePhase("Reasoning Synthesis", "complete", "Memo synthesized.");
 
-      if (!response.body) {
-        handleRunFailure("Research run did not return a stream.");
-        return;
-      }
-
-      for await (const event of parseJsonLines<AgentEvent>(response.body)) {
-        handleEvent(event);
-      }
+      updatePhase("Memo Rendering", "running", "Rendering the final memo.");
+      updatePhase("Memo Rendering", "complete", "Final memo ready.");
+      setWorkbenchStage("complete");
     } catch (runError) {
       handleRunFailure(
         runError instanceof Error ? runError.message : "Research run failed."
@@ -260,50 +325,85 @@ export function LiveResearchWorkbench() {
     }
   }
 
+  async function runEvidenceQueue(
+    request: AgentRequest,
+    evidencePlan: EvidencePlanArtifact
+  ): Promise<AgentEvidenceCard[]> {
+    const limit = pLimit(2);
+    const completedGroups: AgentEvidenceCard[][] = Array.from({
+      length: evidencePlan.items.length
+    });
+    let completedCount = 0;
+
+    const tasks = evidencePlan.items.map((item, index) =>
+      limit(async () => {
+        const result = await runEvidenceTaskUntilSuccess(request, item, index);
+        completedGroups[index] = result.evidenceCards;
+        completedCount += 1;
+        const mergedCards = completedGroups.flatMap((group) => group ?? []);
+        setEvidence({
+          type: "evidence-cards",
+          evidenceCards: mergedCards
+        });
+        updatePhase(
+          "Evidence Research",
+          "running",
+          `${completedCount}/${evidencePlan.items.length} evidence tasks complete.`
+        );
+        appendTelemetry(result.telemetry);
+      })
+    );
+
+    await Promise.all(tasks);
+    return completedGroups.flatMap((group) => group ?? []);
+  }
+
+  async function runEvidenceTaskUntilSuccess(
+    request: AgentRequest,
+    item: EvidencePlanArtifact["items"][number],
+    index: number
+  ): Promise<EvidenceTaskResponse> {
+    let attempt = 1;
+
+    while (true) {
+      try {
+        const result = await postJson<EvidenceTaskResponse>("/api/research/evidence", {
+          request,
+          item
+        });
+        if (result.evidenceCards.length === 0) {
+          throw new Error("Evidence task returned no evidence cards.");
+        }
+        return result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Evidence task failed.";
+        console.warn(
+          `Evidence task ${index + 1} failed on attempt ${attempt}; retrying in 5 seconds.`,
+          error
+        );
+        updatePhase(
+          "Evidence Research",
+          "running",
+          `Task ${index + 1} attempt ${attempt} failed: ${message}. Retrying in 5 seconds.`
+        );
+        attempt += 1;
+        await delay(5000);
+      }
+    }
+  }
+
+  function appendTelemetry(metrics: AgentTelemetryMetric[] | undefined) {
+    if (!metrics?.length) {
+      return;
+    }
+    setTelemetryMetrics((current) => [...current, ...metrics]);
+  }
+
   function handleRunFailure(message: string) {
     setError(message);
     setModeLabel("Error");
     setWorkbenchStage("error");
     setPhases(failedPhases(message));
-  }
-
-  function handleEvent(event: AgentEvent) {
-    if (event.type === "run-started") {
-      setModeLabel(event.mode === "live-agent" ? "Live Agent" : "Demo Fallback");
-    }
-    if (event.type === "phase-started") {
-      updatePhase(event.phase, "running", event.detail);
-    }
-    if (event.type === "phase-completed") {
-      updatePhase(event.phase, "complete", event.detail);
-    }
-    if (event.type === "phase-failed") {
-      updatePhase(event.phase, "failed", event.error);
-    }
-    if (event.type === "telemetry") {
-      setTelemetryMetrics((current) => [...current, event.metric]);
-    }
-    if (event.type === "artifact") {
-      if (event.artifact.type === "hypothesis-tree") {
-        setTree(event.artifact);
-        setSelectedNodeId(event.artifact.nodes[0]?.id ?? null);
-      }
-      if (event.artifact.type === "evidence-cards") {
-        setEvidence(event.artifact);
-      }
-      if (event.artifact.type === "memo") {
-        setMemo(event.artifact);
-      }
-    }
-    if (event.type === "run-completed" && event.run.phases.length > 0) {
-      setPhases(event.run.phases);
-      setWorkbenchStage("complete");
-    } else if (event.type === "run-completed") {
-      setWorkbenchStage("complete");
-    }
-    if (event.type === "run-failed") {
-      handleRunFailure(event.error);
-    }
   }
 
   const hasStarted = workbenchStage !== "intro";

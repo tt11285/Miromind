@@ -136,17 +136,17 @@ export const hypothesisTreeArtifactSchema = hypothesisOutputSchema.extend({
   type: z.literal("hypothesis-tree")
 }).strict();
 
+export const evidencePlanItemSchema = z.object({
+  nodeId: z.string().min(1),
+  researchQuestions: z.array(z.string().min(1)).min(1),
+  preferredSourceTypes: z.array(evidenceSourceTypeSchema).min(1),
+  sourceCandidates: z.array(z.string()),
+  supportingSignals: z.array(z.string().min(1)).min(1),
+  refutingSignals: z.array(z.string().min(1)).min(1)
+}).strict();
+
 export const evidencePlanOutputSchema = z.object({
-  items: z.array(
-    z.object({
-      nodeId: z.string().min(1),
-      researchQuestions: z.array(z.string().min(1)).min(1),
-      preferredSourceTypes: z.array(evidenceSourceTypeSchema).min(1),
-      sourceCandidates: z.array(z.string()),
-      supportingSignals: z.array(z.string().min(1)).min(1),
-      refutingSignals: z.array(z.string().min(1)).min(1)
-    }).strict()
-  ).min(1)
+  items: z.array(evidencePlanItemSchema).min(1)
 }).strict();
 
 export const evidencePlanArtifactSchema = evidencePlanOutputSchema.extend({
