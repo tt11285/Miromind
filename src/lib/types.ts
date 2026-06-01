@@ -107,27 +107,3 @@ export interface InvestmentMemo {
   humanReviewChecklist: string[];
   sections: MemoSection[];
 }
-
-export type RunPhaseName =
-  | "Task Framing"
-  | "Hypothesis Generation"
-  | "Evidence Collection"
-  | "Evidence Scoring"
-  | "Reasoning Synthesis"
-  | "Memo Rendering";
-
-export interface RunPhase {
-  name: RunPhaseName;
-  status: "complete" | "running" | "queued" | "failed";
-  detail: string;
-}
-
-export interface ResearchRun {
-  task: ResearchTask;
-  rootQuestion: string;
-  phases: RunPhase[];
-  nodes: NodeConclusion[];
-  evidence: EvidenceCard[];
-  memo: InvestmentMemo;
-  mode: "fixture" | "miromind-augmented";
-}

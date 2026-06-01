@@ -6,11 +6,15 @@ Financial research often gives users a polished conclusion without showing how t
 
 ## 0:20 to 0:45 - Setup
 
-For the demo, I will use the golden path: NVIDIA, with the question "Is NVIDIA's current valuation justified by AI growth fundamentals?" Microsoft, Micron, and Tesla are also supported, along with templates for valuation, downside risk, bull-versus-bear divergence, and earnings thesis changes. Click Run Deep Research to start the workflow.
+Search for `NVIDIA` or `NVDA`, select `NVIDIA Corporation | NVDA | NASDAQ | US | Equity`, then run the question:
+
+> Is NVIDIA's current valuation justified by AI growth fundamentals?
+
+Point out that the company is selected from a listed-security dropdown, so the agent does not guess the ticker. Microsoft, Micron, and Tesla are also available in the same selector, with Micron as the secondary demo path.
 
 ## 0:45 to 1:20 - Workflow
 
-ValuationLens is not a single report-generation prompt. After clicking Run Deep Research, the UI displays the staged workflow and exposes reviewable artifacts: hypothesis tree, evidence cards, scoring, reasoning notes, and the memo.
+ValuationLens is not a single report-generation prompt. After clicking Run Deep Research, the UI streams the staged workflow and exposes reviewable artifacts: task frame, hypothesis tree, evidence plan, evidence cards, scoring, reasoning notes, and the memo.
 
 ## 1:20 to 2:05 - Hypothesis Tree
 

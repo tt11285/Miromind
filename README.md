@@ -1,24 +1,19 @@
 # ValuationLens
 
-ValuationLens is a transparent financial research agent for large-cap technology stocks. It turns a stock research question into an auditable hypothesis tree, evidence cards, node-level reasoning, and an interactive investment memo.
+ValuationLens is a transparent financial research agent for large-cap technology stocks. It lets a user select a listed public company, ask a research question, and watch the agent stream the reasoning chain from task framing to hypothesis tree, evidence, local scoring, and final memo.
 
 Every major memo claim links back to hypothesis nodes and evidence cards.
 
 ## Supported Scope
 
-Supported companies:
+Supported demo securities:
 
-- NVIDIA
-- Microsoft
-- Micron
-- Tesla
+- NVIDIA Corporation (NVDA, NASDAQ)
+- Microsoft Corporation (MSFT, NASDAQ)
+- Micron Technology, Inc. (MU, NASDAQ)
+- Tesla, Inc. (TSLA, NASDAQ)
 
-Supported research templates:
-
-- Is the current valuation justified by growth fundamentals?
-- What is the most material downside risk over the next 12 months?
-- Where do bull and bear theses diverge most?
-- Did the latest earnings change the investment thesis?
+The left panel searches by company name or ticker and requires the user to select a listed equity before a research run can start.
 
 Golden path:
 
@@ -30,39 +25,37 @@ Financial research needs a visible path from question to hypothesis, evidence, c
 
 ## How It Works
 
-ValuationLens follows a six-stage workflow:
+ValuationLens follows a seven-stage workflow:
 
 1. Task Framing
 2. Hypothesis Generation
-3. Evidence Collection
-4. Evidence Scoring
-5. Reasoning Synthesis
-6. Memo Rendering
+3. Evidence Planning
+4. Evidence Research
+5. Evidence Scoring
+6. Reasoning Synthesis
+7. Memo Rendering
 
-## MiroMind Integration
+## Live Agent Setup
 
-The visible UI demo remains fixture-backed by default so the hackathon walkthrough is stable. The API route calls MiroMind only when a request includes `useMiroMind: true` and `MIROMIND_API_KEY` is present.
+Create `.env.local`:
 
-```env
+```bash
 MIROMIND_API_KEY=your_key_here
 MIROMIND_MODEL=gpt-oss-120b
+MIROMIND_BASE_URL=https://api.miromind.ai/v1
 ```
 
-Endpoint:
+When `MIROMIND_API_KEY` is present, ValuationLens runs in Live Agent mode and streams MiroMind-backed research stages. Without the key, the app only uses clearly labeled Demo Fallback mode for curated demo tasks.
 
-```text
-https://api.miromind.ai/v1/chat/completions
-```
+The API key is configured on the server and is never entered in the browser.
 
-Example API flag:
+## Primary Demo
 
-```json
-{
-  "useMiroMind": true
-}
-```
+Use NVIDIA Corporation (NVDA, NASDAQ) with:
 
-Without credentials, or without `useMiroMind: true`, the curated fixture pipeline keeps the hackathon demo stable.
+> Is NVIDIA's current valuation justified by AI growth fundamentals?
+
+Use Micron Technology (MU, NASDAQ) as a secondary demo to show that the agent flow is not hard-coded to NVIDIA.
 
 ## Run Locally
 
@@ -77,6 +70,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ```bash
 npm run test
+npm run check
 npm run build
 ```
 
