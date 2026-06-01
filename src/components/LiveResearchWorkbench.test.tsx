@@ -78,7 +78,8 @@ describe("LiveResearchWorkbench", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Run Deep Research" }));
 
-    expect(screen.getByRole("button", { name: "Launching Agent..." })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Running Research" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Running Research" })).not.toHaveClass("launching");
     expect(screen.getByRole("main")).toHaveClass("launching-active");
     expect(await screen.findByText("Task Framing")).toBeInTheDocument();
     expect(screen.queryByText("Hypothesis Generation")).not.toBeInTheDocument();
@@ -116,6 +117,86 @@ describe("LiveResearchWorkbench", () => {
       agentStream.close();
       await Promise.resolve();
     });
+  });
+
+  it("collapses the completed research timeline into a summary", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/research/status")) {
+          return Response.json({
+            liveAvailable: true,
+            model: "mirothinker-1-7-deepresearch",
+            fallbackAvailable: true
+          });
+        }
+        if (url.includes("/api/research/run")) {
+          return new Response(
+            streamFromLines([
+              { type: "run-started", runId: "run-complete", mode: "live-agent" },
+              {
+                type: "artifact",
+                artifact: {
+                  type: "memo",
+                  executiveSummary: "Partially supported.",
+                  finalStance: "Partially Supported",
+                  confidence: "Medium",
+                  finalScore: 0.5,
+                  keyDrivers: ["Demand"],
+                  biggestCounterargument: "Valuation sensitivity.",
+                  whatWouldChangeTheView: ["Demand slowdown"],
+                  humanReviewChecklist: ["Verify sources"],
+                  sections: [
+                    {
+                      id: "demand",
+                      title: "Demand Sustainability",
+                      body: "Demand supports the thesis.",
+                      linkedNodeIds: ["demand"],
+                      linkedEvidenceIds: []
+                    }
+                  ]
+                }
+              },
+              {
+                type: "run-completed",
+                run: {
+                  runId: "run-complete",
+                  mode: "live-agent",
+                  phases: [
+                    { name: "Task Framing", status: "complete", detail: "Done" },
+                    { name: "Hypothesis Generation", status: "complete", detail: "Done" },
+                    { name: "Evidence Planning", status: "complete", detail: "Done" },
+                    { name: "Evidence Research", status: "complete", detail: "Done" },
+                    { name: "Evidence Scoring", status: "complete", detail: "Done" },
+                    { name: "Reasoning Synthesis", status: "complete", detail: "Done" },
+                    { name: "Memo Rendering", status: "complete", detail: "Done" }
+                  ],
+                  artifacts: []
+                }
+              }
+            ]),
+            { headers: { "Content-Type": "application/x-ndjson" } }
+          );
+        }
+        throw new Error(`Unexpected fetch ${url}`);
+      })
+    );
+
+    render(<LiveResearchWorkbench />);
+
+    fireEvent.click(screen.getByRole("button", { name: "NVIDIA / NVDA" }));
+    fireEvent.change(screen.getByLabelText("Research question"), {
+      target: {
+        value: "Is NVIDIA's current valuation justified by AI growth fundamentals?"
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run Deep Research" }));
+
+    expect(await screen.findByText("Deep Research complete")).toBeInTheDocument();
+    expect(screen.getByText("7/7 steps complete")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Agent run timeline" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Investment memo" })).toBeInTheDocument();
   });
 
   it("starts as a full-screen agent and reveals the workspace after running", async () => {

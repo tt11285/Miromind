@@ -89,22 +89,8 @@ select {
   transition: grid-template-columns 180ms ease;
 }
 
-.app-shell.launching-active .setup-panel {
-  animation: agent-dock 850ms ease both;
-}
-
 .progressive-panel {
   animation: panel-in 220ms ease both;
-}
-
-@keyframes agent-dock {
-  from {
-    transform: translateX(18vw) scale(1.02);
-  }
-
-  to {
-    transform: translateX(0) scale(1);
-  }
 }
 
 @keyframes panel-in {
@@ -300,37 +286,8 @@ textarea {
 }
 
 .primary-action {
-  overflow: hidden;
   padding: 10px 14px;
-  position: relative;
   font-weight: 800;
-}
-
-.primary-action.launching {
-  background: #073b86;
-  border-color: #073b86;
-  color: #fff;
-  transform: translateY(1px);
-}
-
-.primary-action.launching::after {
-  animation: button-shimmer 950ms linear infinite;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.45),
-    transparent
-  );
-  content: "";
-  inset: 0;
-  position: absolute;
-  transform: translateX(-100%);
-}
-
-@keyframes button-shimmer {
-  to {
-    transform: translateX(100%);
-  }
 }
 
 .primary-action:disabled {
@@ -338,13 +295,6 @@ textarea {
   border-color: #d0d5dd;
   color: #667085;
   cursor: not-allowed;
-}
-
-.primary-action.launching:disabled {
-  background: #073b86;
-  border-color: #073b86;
-  color: #fff;
-  cursor: progress;
 }
 
 .run-help {
@@ -540,6 +490,34 @@ textarea {
 .diagnostics-panel li {
   color: #334155;
   font-size: 12px;
+}
+
+.completed-summary {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  margin: 14px 0;
+  padding: 12px;
+}
+
+.completed-summary h3 {
+  font-size: 14px;
+  margin: 0 0 3px;
+}
+
+.completed-summary p {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
+.completed-summary span {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .step-index {

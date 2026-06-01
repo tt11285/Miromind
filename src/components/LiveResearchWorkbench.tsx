@@ -326,7 +326,6 @@ export function LiveResearchWorkbench() {
       style={hasStarted ? { gridTemplateColumns } : undefined}
     >
       <AgentInputPanel
-        isLaunching={workbenchStage === "launching"}
         isRunning={isRunning}
         modeLabel={modeLabel}
         onRun={handleRun}
@@ -360,8 +359,12 @@ export function LiveResearchWorkbench() {
                 {error}
               </div>
             ) : null}
-            <AgentRunTimeline phases={renderedPhases} />
-            {telemetryMetrics.length > 0 ? (
+            {workbenchStage === "complete" ? (
+              <CompletedRunSummary phases={phases} />
+            ) : (
+              <AgentRunTimeline phases={renderedPhases} />
+            )}
+            {telemetryMetrics.length > 0 && workbenchStage !== "complete" ? (
               <RunDiagnostics metrics={telemetryMetrics} />
             ) : null}
             {memo ? (
@@ -412,6 +415,20 @@ export function LiveResearchWorkbench() {
         </>
       ) : null}
     </main>
+  );
+}
+
+function CompletedRunSummary({ phases }: { phases: AgentPhase[] }) {
+  const completedCount = phases.filter((phase) => phase.status === "complete").length;
+
+  return (
+    <section className="completed-summary" aria-label="Completed research summary">
+      <div>
+        <h3>Deep Research complete</h3>
+        <p>{completedCount}/7 steps complete</p>
+      </div>
+      <span>Collapsed</span>
+    </section>
   );
 }
 

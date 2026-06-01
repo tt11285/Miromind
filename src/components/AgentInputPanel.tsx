@@ -9,7 +9,6 @@ import type {
 import { useState } from "react";
 
 interface AgentInputPanelProps {
-  isLaunching?: boolean;
   isRunning: boolean;
   modeLabel: "Live Agent" | "Demo Fallback" | "Error";
   onRun: (request: AgentRequest) => void;
@@ -81,7 +80,6 @@ const suggestedQuestionsByTicker: Record<string, string[]> = {
 };
 
 export function AgentInputPanel({
-  isLaunching = false,
   isRunning,
   modeLabel,
   onRun
@@ -245,7 +243,7 @@ export function AgentInputPanel({
 
       <button
         aria-describedby={!canRun ? "run-help" : undefined}
-        className={`primary-action${isLaunching ? " launching" : ""}`}
+        className="primary-action"
         disabled={!canRun}
         title={!canRun ? runHelpText : undefined}
         onClick={() =>
@@ -261,11 +259,7 @@ export function AgentInputPanel({
         }
         type="button"
       >
-        {isLaunching
-          ? "Launching Agent..."
-          : isRunning
-            ? "Running Research"
-            : "Run Deep Research"}
+        {isRunning ? "Running Research" : "Run Deep Research"}
       </button>
     </section>
   );

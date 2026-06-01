@@ -62,19 +62,18 @@ describe("AgentInputPanel", () => {
     );
   });
 
-  it("shows a launching button state and a compact research question box", () => {
+  it("shows a plain running button state and a compact research question box", () => {
     render(
       <AgentInputPanel
-        isLaunching={true}
         isRunning={true}
         modeLabel="Live Agent"
         onRun={vi.fn()}
       />
     );
 
-    expect(screen.getByRole("button", { name: "Launching Agent..." })).toHaveClass(
-      "launching"
-    );
+    const button = screen.getByRole("button", { name: "Running Research" });
+    expect(button).toBeDisabled();
+    expect(button).not.toHaveClass("launching");
     expect(screen.getByLabelText("Research question")).toHaveClass(
       "research-question-input"
     );
