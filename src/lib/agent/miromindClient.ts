@@ -1,4 +1,5 @@
 import type { ZodSchema } from "zod";
+import type { MiroMindRequestMetric } from "./types";
 
 type FetchImpl = typeof fetch;
 
@@ -7,6 +8,8 @@ interface CreateMiroMindStageClientOptions {
   model: string;
   baseUrl: string;
   fetchImpl?: FetchImpl;
+  now?: () => number;
+  onMetric?: (metric: MiroMindRequestMetric) => void;
 }
 
 interface ChatCompletionResponse {
@@ -31,34 +34,59 @@ export function createMiroMindStageClient(
   options: CreateMiroMindStageClientOptions
 ) {
   const fetchImpl = options.fetchImpl ?? fetch;
+  const now = options.now ?? Date.now;
   const url = `${options.baseUrl.replace(/\/$/, "")}/chat/completions`;
 
-  async function requestContent(prompt: string): Promise<string> {
-    const response = await fetchImpl(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${options.apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: options.model,
-        stream: false,
-        messages: [{ role: "user", content: prompt }]
-      })
-    });
+  async function requestContent(
+    stageName: string,
+    attempt: MiroMindRequestMetric["attempt"],
+    prompt: string
+  ): Promise<string> {
+    const startedAt = now();
+    try {
+      const response = await fetchImpl(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${options.apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: options.model,
+          stream: false,
+          messages: [{ role: "user", content: prompt }]
+        })
+      });
 
-    if (!response.ok) {
-      throw new Error(
-        `MiroMind request failed with status ${response.status}: ${await response.text()}`
-      );
-    }
+      if (!response.ok) {
+        throw new Error(
+          `MiroMind request failed with status ${response.status}: ${await response.text()}`
+        );
+      }
 
-    const payload = (await response.json()) as ChatCompletionResponse;
-    const content = payload.choices?.[0]?.message?.content;
-    if (!content) {
-      throw new Error("MiroMind response did not include assistant content.");
+      const payload = (await response.json()) as ChatCompletionResponse;
+      const content = payload.choices?.[0]?.message?.content;
+      if (!content) {
+        throw new Error("MiroMind response did not include assistant content.");
+      }
+      options.onMetric?.({
+        kind: "miromind-request",
+        stageName,
+        attempt,
+        durationMs: Math.max(0, now() - startedAt),
+        status: "success"
+      });
+      return content;
+    } catch (error) {
+      options.onMetric?.({
+        kind: "miromind-request",
+        stageName,
+        attempt,
+        durationMs: Math.max(0, now() - startedAt),
+        status: "failed",
+        error: formatFailure(error)
+      });
+      throw error;
     }
-    return content;
   }
 
   return {
@@ -67,7 +95,7 @@ export function createMiroMindStageClient(
       prompt: string,
       schema: ZodSchema<T>
     ): Promise<T> {
-      const firstContent = await requestContent(prompt);
+      const firstContent = await requestContent(stageName, "primary", prompt);
       let firstFailure = "";
       try {
         return schema.parse(parseAssistantJson(firstContent));
@@ -85,7 +113,7 @@ export function createMiroMindStageClient(
           firstFailure
         ].join("\n");
         try {
-          const repairedContent = await requestContent(repairPrompt);
+          const repairedContent = await requestContent(stageName, "repair", repairPrompt);
           return schema.parse(parseAssistantJson(repairedContent));
         } catch (repairError) {
           throw new Error(

@@ -65,6 +65,23 @@ export const agentPhaseSchema = z.object({
   detail: z.string()
 }).strict();
 
+export const agentTelemetryMetricSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("phase"),
+    phase: agentPhaseNameSchema,
+    durationMs: z.number().nonnegative(),
+    status: z.enum(["complete", "failed"])
+  }).strict(),
+  z.object({
+    kind: z.literal("miromind-request"),
+    stageName: z.string().min(1),
+    attempt: z.enum(["primary", "repair"]),
+    durationMs: z.number().nonnegative(),
+    status: z.enum(["success", "failed"]),
+    error: z.string().min(1).optional()
+  }).strict()
+]);
+
 export const taskFrameOutputSchema = z.object({
   securityName: z.string().min(1),
   ticker: z.string().min(1),
@@ -309,6 +326,10 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     type: z.literal("phase-failed"),
     phase: agentPhaseNameSchema,
     error: z.string().min(1)
+  }).strict(),
+  z.object({
+    type: z.literal("telemetry"),
+    metric: agentTelemetryMetricSchema
   }).strict(),
   z.object({
     type: z.literal("run-completed"),

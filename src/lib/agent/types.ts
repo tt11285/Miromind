@@ -59,6 +59,24 @@ export interface AgentPhase {
   detail: string;
 }
 
+export interface AgentPhaseMetric {
+  kind: "phase";
+  phase: AgentPhaseName;
+  durationMs: number;
+  status: "complete" | "failed";
+}
+
+export interface MiroMindRequestMetric {
+  kind: "miromind-request";
+  stageName: string;
+  attempt: "primary" | "repair";
+  durationMs: number;
+  status: "success" | "failed";
+  error?: string;
+}
+
+export type AgentTelemetryMetric = AgentPhaseMetric | MiroMindRequestMetric;
+
 export interface TaskFrameArtifact {
   type: "task-frame";
   securityName: string;
@@ -194,5 +212,6 @@ export type AgentEvent =
   | { type: "artifact"; artifact: AgentArtifact }
   | { type: "phase-completed"; phase: AgentPhaseName; detail: string }
   | { type: "phase-failed"; phase: AgentPhaseName; error: string }
+  | { type: "telemetry"; metric: AgentTelemetryMetric }
   | { type: "run-completed"; run: AgentRun }
   | { type: "run-failed"; error: string; fallbackAvailable: boolean };

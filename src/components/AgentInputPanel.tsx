@@ -4,12 +4,12 @@ import type {
   AgentRequest,
   EvidencePreference,
   ListedSecurity,
-  ResearchDepth,
   TimeHorizon
 } from "@/lib/agent/types";
 import { useState } from "react";
 
 interface AgentInputPanelProps {
+  isLaunching?: boolean;
   isRunning: boolean;
   modeLabel: "Live Agent" | "Demo Fallback" | "Error";
   onRun: (request: AgentRequest) => void;
@@ -81,6 +81,7 @@ const suggestedQuestionsByTicker: Record<string, string[]> = {
 };
 
 export function AgentInputPanel({
+  isLaunching = false,
   isRunning,
   modeLabel,
   onRun
@@ -91,7 +92,6 @@ export function AgentInputPanel({
   const [question, setQuestion] = useState("");
   const [suggestedQuestion, setSuggestedQuestion] = useState("");
   const [timeHorizon, setTimeHorizon] = useState<TimeHorizon>("12M");
-  const [researchDepth, setResearchDepth] = useState<ResearchDepth>("deep");
   const [evidencePreference, setEvidencePreference] =
     useState<EvidencePreference>("balanced");
 
@@ -177,6 +177,7 @@ export function AgentInputPanel({
       <label>
         Research question
         <textarea
+          className="research-question-input"
           value={question}
           onChange={(event) => {
             setQuestion(event.target.value);
@@ -222,17 +223,6 @@ export function AgentInputPanel({
       </label>
 
       <label>
-        Research depth
-        <select
-          value={researchDepth}
-          onChange={(event) => setResearchDepth(event.target.value as ResearchDepth)}
-        >
-          <option value="deep">Deep Agent</option>
-          <option value="fast">Fast Agent</option>
-        </select>
-      </label>
-
-      <label>
         Evidence preference
         <select
           value={evidencePreference}
@@ -255,7 +245,7 @@ export function AgentInputPanel({
 
       <button
         aria-describedby={!canRun ? "run-help" : undefined}
-        className="primary-action"
+        className={`primary-action${isLaunching ? " launching" : ""}`}
         disabled={!canRun}
         title={!canRun ? runHelpText : undefined}
         onClick={() =>
@@ -264,14 +254,18 @@ export function AgentInputPanel({
             security,
             question: question.trim(),
             timeHorizon,
-            researchDepth,
+            researchDepth: "deep",
             evidencePreference,
             fallbackAllowed: true
           })
         }
         type="button"
       >
-        {isRunning ? "Running Research" : "Run Deep Research"}
+        {isLaunching
+          ? "Launching Agent..."
+          : isRunning
+            ? "Running Research"
+            : "Run Deep Research"}
       </button>
     </section>
   );

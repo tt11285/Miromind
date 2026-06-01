@@ -2,6 +2,7 @@ import type {
   AgentEvidenceCard,
   AgentRequest,
   EvidencePlanArtifact,
+  EvidencePlanItem,
   HypothesisTreeArtifact,
   ScoredNodesArtifact,
   TaskFrameArtifact
@@ -137,6 +138,20 @@ export function buildEvidenceResearchPrompt(plan: EvidencePlanArtifact): string 
     jsonOnly("EvidenceResearchOutput"),
     evidenceResearchShape,
     `Evidence plan: ${JSON.stringify(plan)}`,
+    "Return evidence cards with provenanceStatus set to verified, model-reported, or unavailable.",
+    "Omit optional score fields when unavailable; do not return null or placeholder values for scores.",
+    "Do not invent a URL. If the source cannot be verified, use provenanceStatus unavailable or model-reported."
+  ].join("\n");
+}
+
+export function buildEvidenceResearchItemPrompt(item: EvidencePlanItem): string {
+  return [
+    jsonOnly("EvidenceResearchOutput"),
+    evidenceResearchShape,
+    `Evidence plan item: ${JSON.stringify(item)}`,
+    `Only research evidence for nodeId: ${item.nodeId}.`,
+    "Return 1 to 3 concise evidence cards for this node.",
+    "Include supporting, refuting, or complicating evidence when available.",
     "Return evidence cards with provenanceStatus set to verified, model-reported, or unavailable.",
     "Omit optional score fields when unavailable; do not return null or placeholder values for scores.",
     "Do not invent a URL. If the source cannot be verified, use provenanceStatus unavailable or model-reported."

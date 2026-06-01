@@ -79,6 +79,57 @@ describe("createMiroMindStageClient", () => {
     expect(repairPrompt).toContain("valid JSON matching the Task Framing schema/contract");
   });
 
+  it("reports request telemetry for primary and repair attempts", async () => {
+    const metrics: Array<{
+      kind: "miromind-request";
+      stageName: string;
+      attempt: "primary" | "repair";
+      durationMs: number;
+      status: "success" | "failed";
+    }> = [];
+    let now = 1000;
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ choices: [{ message: { content: "not-json" } }] }))
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ choices: [{ message: { content: "{\"summary\":\"fixed\"}" } }] }))
+      );
+    const client = createMiroMindStageClient({
+      apiKey: "key",
+      model: "model",
+      baseUrl: "https://api.miromind.ai/v1",
+      fetchImpl,
+      now: () => {
+        now += 10;
+        return now;
+      },
+      onMetric: (metric) => metrics.push(metric)
+    });
+
+    await expect(client.completeJson("Task Framing", "prompt", schema)).resolves.toEqual({
+      summary: "fixed"
+    });
+
+    expect(metrics).toEqual([
+      {
+        kind: "miromind-request",
+        stageName: "Task Framing",
+        attempt: "primary",
+        durationMs: 10,
+        status: "success"
+      },
+      {
+        kind: "miromind-request",
+        stageName: "Task Framing",
+        attempt: "repair",
+        durationMs: 10,
+        status: "success"
+      }
+    ]);
+  });
+
   it("repairs schema-invalid JSON once", async () => {
     const strictSchema = z.object({ summary: z.string() }).strict();
     const fetchImpl = vi

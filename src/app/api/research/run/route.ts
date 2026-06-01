@@ -60,7 +60,14 @@ export async function POST(request: Request): Promise<Response> {
           return;
         }
 
-        const stageClient = createMiroMindStageClient({ apiKey, model, baseUrl });
+        const stageClient = createMiroMindStageClient({
+          apiKey,
+          model,
+          baseUrl,
+          onMetric: (metric) => {
+            controller.enqueue(encodeEvent({ type: "telemetry", metric }));
+          }
+        });
         for await (const event of runAgent(agentRequest, { stageClient, runId })) {
           controller.enqueue(encodeEvent(event));
         }

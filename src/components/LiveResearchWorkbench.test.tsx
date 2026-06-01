@@ -1,4 +1,11 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LiveResearchWorkbench } from "./LiveResearchWorkbench";
 
@@ -18,7 +25,99 @@ function streamFromLines(lines: unknown[]): ReadableStream<Uint8Array> {
   });
 }
 
+function deferredStream() {
+  const encoder = new TextEncoder();
+  let streamController: ReadableStreamDefaultController<Uint8Array>;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      streamController = controller;
+    }
+  });
+
+  return {
+    stream,
+    emit(line: unknown) {
+      streamController.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+    },
+    close() {
+      streamController.close();
+    }
+  };
+}
+
 describe("LiveResearchWorkbench", () => {
+  it("launches with motion state and reveals timeline steps progressively", async () => {
+    const agentStream = deferredStream();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/research/status")) {
+          return Response.json({
+            liveAvailable: true,
+            model: "mirothinker-1-7-deepresearch",
+            fallbackAvailable: true
+          });
+        }
+        if (url.includes("/api/research/run")) {
+          return new Response(agentStream.stream, {
+            headers: { "Content-Type": "application/x-ndjson" }
+          });
+        }
+        throw new Error(`Unexpected fetch ${url}`);
+      })
+    );
+
+    render(<LiveResearchWorkbench />);
+
+    fireEvent.click(screen.getByRole("button", { name: "NVIDIA / NVDA" }));
+    fireEvent.change(screen.getByLabelText("Research question"), {
+      target: {
+        value: "Is NVIDIA's current valuation justified by AI growth fundamentals?"
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run Deep Research" }));
+
+    expect(screen.getByRole("button", { name: "Launching Agent..." })).toBeDisabled();
+    expect(screen.getByRole("main")).toHaveClass("launching-active");
+    expect(await screen.findByText("Task Framing")).toBeInTheDocument();
+    expect(screen.queryByText("Hypothesis Generation")).not.toBeInTheDocument();
+
+    await act(async () => {
+      agentStream.emit({
+        type: "phase-started",
+        phase: "Task Framing",
+        detail: "Framing the selected security and research question."
+      });
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText("Reading the question and framing the decision.")).toBeInTheDocument();
+    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    expect(screen.queryByText("Hypothesis Generation")).not.toBeInTheDocument();
+
+    await act(async () => {
+      agentStream.emit({
+        type: "phase-completed",
+        phase: "Task Framing",
+        detail: "Framed the research task."
+      });
+      agentStream.emit({
+        type: "phase-started",
+        phase: "Hypothesis Generation",
+        detail: "Building the hypothesis tree."
+      });
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText("Hypothesis Generation")).toBeInTheDocument();
+    expect(screen.queryByText("Evidence Planning")).not.toBeInTheDocument();
+    await act(async () => {
+      agentStream.close();
+      await Promise.resolve();
+    });
+  });
+
   it("starts as a full-screen agent and reveals the workspace after running", async () => {
     vi.stubGlobal(
       "fetch",

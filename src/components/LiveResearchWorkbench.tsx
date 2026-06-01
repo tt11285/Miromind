@@ -5,6 +5,7 @@ import type {
   AgentEvent,
   AgentPhase,
   AgentRequest,
+  AgentTelemetryMetric,
   EvidenceCardsArtifact,
   HypothesisTreeArtifact,
   MemoArtifact
@@ -15,6 +16,8 @@ import { AgentRunTimeline } from "./AgentRunTimeline";
 import { EvidencePanel } from "./EvidencePanel";
 import { HypothesisTree } from "./HypothesisTree";
 import { InvestmentMemo } from "./InvestmentMemo";
+
+type WorkbenchStage = "intro" | "launching" | "running" | "complete" | "error";
 
 type DragState = {
   handle: "agent" | "trace";
@@ -44,6 +47,28 @@ function initialPhases(): AgentPhase[] {
     status: "queued",
     detail: "Waiting to run."
   }));
+}
+
+function visiblePhases(phases: AgentPhase[], hasStarted: boolean): AgentPhase[] {
+  if (!hasStarted) {
+    return [];
+  }
+
+  let lastActiveIndex = -1;
+  for (let index = phases.length - 1; index >= 0; index -= 1) {
+    if (phases[index].status !== "queued") {
+      lastActiveIndex = index;
+      break;
+    }
+  }
+  if (lastActiveIndex === -1) {
+    return phases.slice(0, 1);
+  }
+  if (phases.every((phase) => phase.status === "failed")) {
+    return phases;
+  }
+
+  return phases.slice(0, lastActiveIndex + 1);
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -119,7 +144,8 @@ export function LiveResearchWorkbench() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [highlightedNodeIds, setHighlightedNodeIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [hasStarted, setHasStarted] = useState(false);
+  const [telemetryMetrics, setTelemetryMetrics] = useState<AgentTelemetryMetric[]>([]);
+  const [workbenchStage, setWorkbenchStage] = useState<WorkbenchStage>("intro");
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>({
     left: 320,
     right: 380
@@ -134,6 +160,18 @@ export function LiveResearchWorkbench() {
       })
       .catch(() => setModeLabel("Error"));
   }, []);
+
+  useEffect(() => {
+    if (workbenchStage !== "launching") {
+      return;
+    }
+
+    const launchTimer = window.setTimeout(() => {
+      setWorkbenchStage((current) => (current === "launching" ? "running" : current));
+    }, 850);
+
+    return () => window.clearTimeout(launchTimer);
+  }, [workbenchStage]);
 
   useEffect(() => {
     if (!dragState) {
@@ -181,7 +219,7 @@ export function LiveResearchWorkbench() {
   }
 
   async function handleRun(request: AgentRequest) {
-    setHasStarted(true);
+    setWorkbenchStage("launching");
     setIsRunning(true);
     setError(null);
     setTree(null);
@@ -189,6 +227,7 @@ export function LiveResearchWorkbench() {
     setMemo(null);
     setSelectedNodeId(null);
     setHighlightedNodeIds([]);
+    setTelemetryMetrics([]);
     setPhases(initialPhases());
 
     try {
@@ -224,6 +263,7 @@ export function LiveResearchWorkbench() {
   function handleRunFailure(message: string) {
     setError(message);
     setModeLabel("Error");
+    setWorkbenchStage("error");
     setPhases(failedPhases(message));
   }
 
@@ -240,6 +280,9 @@ export function LiveResearchWorkbench() {
     if (event.type === "phase-failed") {
       updatePhase(event.phase, "failed", event.error);
     }
+    if (event.type === "telemetry") {
+      setTelemetryMetrics((current) => [...current, event.metric]);
+    }
     if (event.type === "artifact") {
       if (event.artifact.type === "hypothesis-tree") {
         setTree(event.artifact);
@@ -254,20 +297,26 @@ export function LiveResearchWorkbench() {
     }
     if (event.type === "run-completed" && event.run.phases.length > 0) {
       setPhases(event.run.phases);
+      setWorkbenchStage("complete");
+    } else if (event.type === "run-completed") {
+      setWorkbenchStage("complete");
     }
     if (event.type === "run-failed") {
       handleRunFailure(event.error);
     }
   }
 
+  const hasStarted = workbenchStage !== "intro";
   const showWorkspace = hasStarted;
   const showTraceColumn = Boolean(tree || evidence);
+  const renderedPhases = visiblePhases(phases, hasStarted);
   const gridTemplateColumns = showTraceColumn
     ? `${columnWidths.left}px 12px minmax(420px, 1fr) 12px ${columnWidths.right}px`
     : `${columnWidths.left}px 12px minmax(420px, 1fr)`;
   const shellClassName = [
     "app-shell",
     hasStarted ? "workbench-active" : "intro-active",
+    `${workbenchStage}-active`,
     showTraceColumn ? "trace-visible" : "trace-hidden"
   ].join(" ");
 
@@ -276,7 +325,12 @@ export function LiveResearchWorkbench() {
       className={shellClassName}
       style={hasStarted ? { gridTemplateColumns } : undefined}
     >
-      <AgentInputPanel isRunning={isRunning} modeLabel={modeLabel} onRun={handleRun} />
+      <AgentInputPanel
+        isLaunching={workbenchStage === "launching"}
+        isRunning={isRunning}
+        modeLabel={modeLabel}
+        onRun={handleRun}
+      />
       {showWorkspace ? (
         <>
           <button
@@ -306,7 +360,10 @@ export function LiveResearchWorkbench() {
                 {error}
               </div>
             ) : null}
-            <AgentRunTimeline phases={phases} />
+            <AgentRunTimeline phases={renderedPhases} />
+            {telemetryMetrics.length > 0 ? (
+              <RunDiagnostics metrics={telemetryMetrics} />
+            ) : null}
             {memo ? (
               <InvestmentMemo
                 memo={memo}
@@ -356,4 +413,42 @@ export function LiveResearchWorkbench() {
       ) : null}
     </main>
   );
+}
+
+function RunDiagnostics({ metrics }: { metrics: AgentTelemetryMetric[] }) {
+  const phaseMetrics = metrics.filter((metric) => metric.kind === "phase");
+  const requestMetrics = metrics.filter((metric) => metric.kind === "miromind-request");
+  const repairCount = requestMetrics.filter((metric) => metric.attempt === "repair").length;
+  const failedRequests = requestMetrics.filter((metric) => metric.status === "failed").length;
+  const totalPhaseMs = phaseMetrics.reduce((sum, metric) => sum + metric.durationMs, 0);
+  const latestMetrics = metrics.slice(-5);
+
+  return (
+    <section className="diagnostics-panel" aria-label="Run diagnostics">
+      <div>
+        <h3>Run Diagnostics</h3>
+        <p>
+          {formatDuration(totalPhaseMs)} measured · {requestMetrics.length} API calls ·{" "}
+          {repairCount} repairs · {failedRequests} failed
+        </p>
+      </div>
+      <ul>
+        {latestMetrics.map((metric, index) => (
+          <li key={`${metric.kind}-${index}-${metric.durationMs}`}>
+            {metric.kind === "phase"
+              ? `${metric.phase}: ${formatDuration(metric.durationMs)}`
+              : `${metric.stageName} ${metric.attempt}: ${formatDuration(metric.durationMs)} ${metric.status}`}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function formatDuration(durationMs: number): string {
+  if (durationMs < 1000) {
+    return `${Math.round(durationMs)}ms`;
+  }
+
+  return `${(durationMs / 1000).toFixed(1)}s`;
 }

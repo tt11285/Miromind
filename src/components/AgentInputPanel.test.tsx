@@ -62,6 +62,24 @@ describe("AgentInputPanel", () => {
     );
   });
 
+  it("shows a launching button state and a compact research question box", () => {
+    render(
+      <AgentInputPanel
+        isLaunching={true}
+        isRunning={true}
+        modeLabel="Live Agent"
+        onRun={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Launching Agent..." })).toHaveClass(
+      "launching"
+    );
+    expect(screen.getByLabelText("Research question")).toHaveClass(
+      "research-question-input"
+    );
+  });
+
   it("offers the approved demo security quick chips without Apple", () => {
     render(<AgentInputPanel isRunning={false} modeLabel="Demo Fallback" onRun={vi.fn()} />);
 
@@ -70,6 +88,7 @@ describe("AgentInputPanel", () => {
     expect(screen.getByRole("button", { name: "Micron / MU" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Tesla / TSLA" })).toBeInTheDocument();
     expect(screen.queryByText(/Apple/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Research depth")).not.toBeInTheDocument();
   });
 
   it("fills the research question from company-specific suggestions", () => {
