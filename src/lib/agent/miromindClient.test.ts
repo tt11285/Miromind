@@ -220,7 +220,26 @@ describe("createMiroMindStageClient", () => {
     );
   });
 
-  it("times out stalled requests", async () => {
+  it("does not attach an abort signal by default", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ choices: [{ message: { content: "{\"summary\":\"done\"}" } }] }))
+    );
+    const client = createMiroMindStageClient({
+      apiKey: "key",
+      model: "model",
+      baseUrl: "https://api.miromind.ai/v1",
+      fetchImpl
+    });
+
+    await expect(client.completeJson("Evidence Research", "prompt", schema)).resolves.toEqual({
+      summary: "done"
+    });
+
+    const request = (fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(request.signal).toBeUndefined();
+  });
+
+  it("times out stalled requests when a timeout is explicitly configured", async () => {
     vi.useFakeTimers();
     const fetchImpl = vi.fn((_url: RequestInfo | URL, init?: RequestInit) =>
       new Promise<Response>((_resolve, reject) => {
