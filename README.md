@@ -42,17 +42,17 @@ MiroMind live research requires a server-side API key. Without a real
 will not run live research. The no-key path only supports the clearly labeled
 NVIDIA curated Demo Fallback.
 
-Copy the template:
+Create the local env file:
 
 ```bash
-cp .env.local.example .env.local
+touch .env.local
 ```
 
 Then edit `.env.local`:
 
 ```bash
 MIROMIND_API_KEY=your_real_miromind_api_key
-MIROMIND_MODEL=gpt-oss-120b
+MIROMIND_MODEL=mirothinker-1-7-deepresearch
 MIROMIND_BASE_URL=https://api.miromind.ai/v1
 ```
 

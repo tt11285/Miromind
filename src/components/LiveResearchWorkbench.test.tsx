@@ -27,7 +27,7 @@ describe("LiveResearchWorkbench", () => {
         if (url.includes("/api/research/status")) {
           return Response.json({
             liveAvailable: true,
-            model: "gpt-oss-120b",
+            model: "mirothinker-1-7-deepresearch",
             fallbackAvailable: true
           });
         }

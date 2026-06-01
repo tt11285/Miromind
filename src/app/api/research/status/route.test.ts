@@ -21,7 +21,7 @@ describe("GET /api/research/status", () => {
 
     expect(body).toEqual({
       liveAvailable: false,
-      model: "gpt-oss-120b",
+      model: "mirothinker-1-7-deepresearch",
       fallbackAvailable: true
     });
   });
@@ -36,7 +36,7 @@ describe("GET /api/research/status", () => {
 
     expect(body).toEqual({
       liveAvailable: true,
-      model: "gpt-oss-120b",
+      model: "mirothinker-1-7-deepresearch",
       fallbackAvailable: true
     });
     expect(bodyText).not.toContain("secret-test-key");
