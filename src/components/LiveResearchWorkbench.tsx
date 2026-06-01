@@ -16,6 +16,18 @@ import { EvidencePanel } from "./EvidencePanel";
 import { HypothesisTree } from "./HypothesisTree";
 import { InvestmentMemo } from "./InvestmentMemo";
 
+type DragState = {
+  handle: "agent" | "trace";
+  startX: number;
+  startLeft: number;
+  startRight: number;
+};
+
+interface ColumnWidths {
+  left: number;
+  right: number;
+}
+
 const phaseNames: AgentPhase["name"][] = [
   "Task Framing",
   "Hypothesis Generation",
@@ -34,6 +46,68 @@ function initialPhases(): AgentPhase[] {
   }));
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function failedPhases(detail: string): AgentPhase[] {
+  return phaseNames.map((name) => ({
+    name,
+    status: "failed",
+    detail
+  }));
+}
+
+function sanitizeAgentRequest(request: AgentRequest): AgentRequest {
+  const { name, ticker, exchange, country, assetType } = request.security;
+  return {
+    ...request,
+    security: {
+      name,
+      ticker,
+      exchange,
+      country,
+      assetType
+    }
+  };
+}
+
+function formatServerError(message: string): string {
+  try {
+    const parsed = JSON.parse(message) as Array<{
+      code?: string;
+      keys?: string[];
+      message?: string;
+    }>;
+    const unrecognizedKeys = parsed
+      .filter((item) => item.code === "unrecognized_keys" && item.keys?.length)
+      .flatMap((item) => item.keys ?? []);
+    if (unrecognizedKeys.length > 0) {
+      return `Invalid research request: unexpected field(s) ${unrecognizedKeys.join(", ")}.`;
+    }
+    const firstMessage = parsed.find((item) => item.message)?.message;
+    return firstMessage ?? message;
+  } catch {
+    return message;
+  }
+}
+
+async function extractErrorMessage(response: Response): Promise<string> {
+  const fallback = `Research run failed with status ${response.status}.`;
+  const text = await response.text();
+  if (!text) {
+    return fallback;
+  }
+
+  try {
+    const payload = JSON.parse(text) as { error?: string; message?: string };
+    const message = payload.message ?? payload.error;
+    return message ? formatServerError(message) : fallback;
+  } catch {
+    return text;
+  }
+}
+
 export function LiveResearchWorkbench() {
   const [modeLabel, setModeLabel] =
     useState<"Live Agent" | "Demo Fallback" | "Error">("Demo Fallback");
@@ -45,6 +119,12 @@ export function LiveResearchWorkbench() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [highlightedNodeIds, setHighlightedNodeIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [hasStarted, setHasStarted] = useState(false);
+  const [columnWidths, setColumnWidths] = useState<ColumnWidths>({
+    left: 320,
+    right: 380
+  });
+  const [dragState, setDragState] = useState<DragState | null>(null);
 
   useEffect(() => {
     fetch("/api/research/status")
@@ -54,6 +134,41 @@ export function LiveResearchWorkbench() {
       })
       .catch(() => setModeLabel("Error"));
   }, []);
+
+  useEffect(() => {
+    if (!dragState) {
+      return;
+    }
+    const activeDrag = dragState;
+
+    function handleMouseMove(event: MouseEvent) {
+      const deltaX = event.clientX - activeDrag.startX;
+      setColumnWidths((current) => {
+        if (activeDrag.handle === "agent") {
+          return {
+            ...current,
+            left: clamp(activeDrag.startLeft + deltaX, 260, 560)
+          };
+        }
+
+        return {
+          ...current,
+          right: clamp(activeDrag.startRight - deltaX, 300, 620)
+        };
+      });
+    }
+
+    function handleMouseUp() {
+      setDragState(null);
+    }
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [dragState]);
 
   function updatePhase(
     name: AgentPhase["name"],
@@ -66,6 +181,7 @@ export function LiveResearchWorkbench() {
   }
 
   async function handleRun(request: AgentRequest) {
+    setHasStarted(true);
     setIsRunning(true);
     setError(null);
     setTree(null);
@@ -76,14 +192,20 @@ export function LiveResearchWorkbench() {
     setPhases(initialPhases());
 
     try {
+      const cleanedRequest = sanitizeAgentRequest(request);
       const response = await fetch("/api/research/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(request)
+        body: JSON.stringify(cleanedRequest)
       });
 
+      if (!response.ok) {
+        handleRunFailure(await extractErrorMessage(response));
+        return;
+      }
+
       if (!response.body) {
-        setError("Research run did not return a stream.");
+        handleRunFailure("Research run did not return a stream.");
         return;
       }
 
@@ -91,10 +213,18 @@ export function LiveResearchWorkbench() {
         handleEvent(event);
       }
     } catch (runError) {
-      setError(runError instanceof Error ? runError.message : "Research run failed.");
+      handleRunFailure(
+        runError instanceof Error ? runError.message : "Research run failed."
+      );
     } finally {
       setIsRunning(false);
     }
+  }
+
+  function handleRunFailure(message: string) {
+    setError(message);
+    setModeLabel("Error");
+    setPhases(failedPhases(message));
   }
 
   function handleEvent(event: AgentEvent) {
@@ -126,46 +256,104 @@ export function LiveResearchWorkbench() {
       setPhases(event.run.phases);
     }
     if (event.type === "run-failed") {
-      setError(event.error);
+      handleRunFailure(event.error);
     }
   }
 
+  const showWorkspace = hasStarted;
+  const showTraceColumn = Boolean(tree || evidence);
+  const gridTemplateColumns = showTraceColumn
+    ? `${columnWidths.left}px 12px minmax(420px, 1fr) 12px ${columnWidths.right}px`
+    : `${columnWidths.left}px 12px minmax(420px, 1fr)`;
+  const shellClassName = [
+    "app-shell",
+    hasStarted ? "workbench-active" : "intro-active",
+    showTraceColumn ? "trace-visible" : "trace-hidden"
+  ].join(" ");
+
   return (
-    <main className="app-shell">
+    <main
+      className={shellClassName}
+      style={hasStarted ? { gridTemplateColumns } : undefined}
+    >
       <AgentInputPanel isRunning={isRunning} modeLabel={modeLabel} onRun={handleRun} />
-      <section className="workspace">
-        <div className="workspace-header">
-          <div>
-            <p className="eyebrow">MiroMind Deep Research</p>
-            <h2>{tree?.rootQuestion ?? "Run a listed-company research question"}</h2>
-          </div>
-          <span className="mode-pill">{modeLabel}</span>
-        </div>
-        {error ? <div className="error-panel">{error}</div> : null}
-        <AgentRunTimeline phases={phases} />
-        {memo ? (
-          <InvestmentMemo
-            memo={memo}
-            onSectionSelect={(nodeIds) => {
-              setHighlightedNodeIds(nodeIds);
-              setSelectedNodeId(nodeIds[0] ?? null);
-            }}
+      {showWorkspace ? (
+        <>
+          <button
+            aria-label="Resize agent and workspace columns"
+            className="column-resizer"
+            onMouseDown={(event) =>
+              setDragState({
+                handle: "agent",
+                startX: event.clientX,
+                startLeft: columnWidths.left,
+                startRight: columnWidths.right
+              })
+            }
+            role="separator"
+            type="button"
           />
-        ) : null}
-      </section>
-      <aside className="trace-column">
-        <HypothesisTree
-          nodes={tree?.nodes ?? []}
-          selectedNodeId={selectedNodeId}
-          highlightedNodeIds={highlightedNodeIds}
-          onSelectNode={setSelectedNodeId}
-        />
-        <EvidencePanel
-          selectedNodeId={selectedNodeId}
-          nodes={tree?.nodes ?? []}
-          evidence={evidence?.evidenceCards ?? []}
-        />
-      </aside>
+          <section className="workspace progressive-panel">
+            <div className="workspace-header">
+              <div>
+                <p className="eyebrow">MiroMind Deep Research</p>
+                <h2>{tree?.rootQuestion ?? "Run a listed-company research question"}</h2>
+              </div>
+              <span className="mode-pill">{modeLabel}</span>
+            </div>
+            {error ? (
+              <div aria-live="assertive" className="error-panel error-toast" role="alert">
+                {error}
+              </div>
+            ) : null}
+            <AgentRunTimeline phases={phases} />
+            {memo ? (
+              <InvestmentMemo
+                memo={memo}
+                onSectionSelect={(nodeIds) => {
+                  setHighlightedNodeIds(nodeIds);
+                  setSelectedNodeId(nodeIds[0] ?? null);
+                }}
+              />
+            ) : null}
+          </section>
+          {showTraceColumn ? (
+            <>
+              <button
+                aria-label="Resize workspace and trace columns"
+                className="column-resizer"
+                onMouseDown={(event) =>
+                  setDragState({
+                    handle: "trace",
+                    startX: event.clientX,
+                    startLeft: columnWidths.left,
+                    startRight: columnWidths.right
+                  })
+                }
+                role="separator"
+                type="button"
+              />
+              <aside className="trace-column progressive-panel">
+                {tree ? (
+                  <HypothesisTree
+                    nodes={tree.nodes}
+                    selectedNodeId={selectedNodeId}
+                    highlightedNodeIds={highlightedNodeIds}
+                    onSelectNode={setSelectedNodeId}
+                  />
+                ) : null}
+                {evidence ? (
+                  <EvidencePanel
+                    selectedNodeId={selectedNodeId}
+                    nodes={tree?.nodes ?? []}
+                    evidence={evidence.evidenceCards}
+                  />
+                ) : null}
+              </aside>
+            </>
+          ) : null}
+        </>
+      ) : null}
     </main>
   );
 }

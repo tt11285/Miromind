@@ -8,6 +8,21 @@ function encodeEvent(event: AgentEvent): Uint8Array {
   return new TextEncoder().encode(`${JSON.stringify(event)}\n`);
 }
 
+function enqueueFallbackRun(
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  runId: string,
+  agentRequest: AgentRequest
+) {
+  const fallbackRun = createFallbackRun(runId, agentRequest);
+  controller.enqueue(
+    encodeEvent({ type: "run-started", runId, mode: "demo-fallback" })
+  );
+  for (const artifact of fallbackRun.artifacts) {
+    controller.enqueue(encodeEvent({ type: "artifact", artifact }));
+  }
+  controller.enqueue(encodeEvent({ type: "run-completed", run: fallbackRun }));
+}
+
 export async function POST(request: Request): Promise<Response> {
   const parsed = agentRequestSchema.safeParse(await request.json());
   if (!parsed.success) {
@@ -40,14 +55,7 @@ export async function POST(request: Request): Promise<Response> {
             return;
           }
 
-          const fallbackRun = createFallbackRun(runId, agentRequest);
-          controller.enqueue(
-            encodeEvent({ type: "run-started", runId, mode: "demo-fallback" })
-          );
-          for (const artifact of fallbackRun.artifacts) {
-            controller.enqueue(encodeEvent({ type: "artifact", artifact }));
-          }
-          controller.enqueue(encodeEvent({ type: "run-completed", run: fallbackRun }));
+          enqueueFallbackRun(controller, runId, agentRequest);
           controller.close();
           return;
         }
@@ -58,6 +66,12 @@ export async function POST(request: Request): Promise<Response> {
         }
         controller.close();
       } catch (error) {
+        if (agentRequest.fallbackAllowed && isCuratedFallbackEligible(agentRequest)) {
+          enqueueFallbackRun(controller, runId, agentRequest);
+          controller.close();
+          return;
+        }
+
         controller.enqueue(
           encodeEvent({
             type: "run-failed",

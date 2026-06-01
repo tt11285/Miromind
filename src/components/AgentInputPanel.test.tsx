@@ -71,4 +71,32 @@ describe("AgentInputPanel", () => {
     expect(screen.getByRole("button", { name: "Tesla / TSLA" })).toBeInTheDocument();
     expect(screen.queryByText(/Apple/i)).not.toBeInTheDocument();
   });
+
+  it("fills the research question from company-specific suggestions", () => {
+    render(<AgentInputPanel isRunning={false} modeLabel="Live Agent" onRun={vi.fn()} />);
+
+    expect(screen.queryByLabelText("Suggested questions")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Micron / MU" }));
+    const suggestions = screen.getByLabelText("Suggested questions");
+    fireEvent.change(suggestions, {
+      target: {
+        value: "Is Micron's valuation justified by HBM-driven AI memory demand?"
+      }
+    });
+
+    expect(screen.getByLabelText("Research question")).toHaveValue(
+      "Is Micron's valuation justified by HBM-driven AI memory demand?"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Tesla / TSLA" }));
+    expect(screen.getByLabelText("Suggested questions")).toHaveDisplayValue(
+      "Choose a suggested question"
+    );
+    expect(
+      screen.getByRole("option", {
+        name: "Is Tesla's valuation justified by autonomous driving and robotaxi optionality?"
+      })
+    ).toBeInTheDocument();
+  });
 });

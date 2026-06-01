@@ -19,6 +19,118 @@ function streamFromLines(lines: unknown[]): ReadableStream<Uint8Array> {
 }
 
 describe("LiveResearchWorkbench", () => {
+  it("starts as a full-screen agent and reveals the workspace after running", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/research/status")) {
+          return Response.json({
+            liveAvailable: true,
+            model: "mirothinker-1-7-deepresearch",
+            fallbackAvailable: true
+          });
+        }
+        if (url.includes("/api/research/run")) {
+          return new Response(
+            streamFromLines([
+              { type: "run-started", runId: "run-intro", mode: "live-agent" },
+              { type: "phase-started", phase: "Task Framing", detail: "Framing" },
+              {
+                type: "run-completed",
+                run: { runId: "run-intro", mode: "live-agent", phases: [], artifacts: [] }
+              }
+            ]),
+            { headers: { "Content-Type": "application/x-ndjson" } }
+          );
+        }
+        throw new Error(`Unexpected fetch ${url}`);
+      })
+    );
+
+    render(<LiveResearchWorkbench />);
+
+    expect(screen.getByRole("main")).toHaveClass("intro-active");
+    expect(screen.queryByText("MiroMind Deep Research")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "NVIDIA / NVDA" }));
+    fireEvent.change(screen.getByLabelText("Research question"), {
+      target: {
+        value: "Is NVIDIA's current valuation justified by AI growth fundamentals?"
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run Deep Research" }));
+
+    expect(await screen.findByText("MiroMind Deep Research")).toBeInTheDocument();
+    expect(screen.getByRole("main")).toHaveClass("workbench-active");
+  });
+
+  it("resizes the active workbench columns with drag handles", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/research/status")) {
+          return Response.json({
+            liveAvailable: true,
+            model: "mirothinker-1-7-deepresearch",
+            fallbackAvailable: true
+          });
+        }
+        if (url.includes("/api/research/run")) {
+          return new Response(
+            streamFromLines([
+              { type: "run-started", runId: "run-resize", mode: "live-agent" },
+              {
+                type: "artifact",
+                artifact: {
+                  type: "hypothesis-tree",
+                  rootQuestion: "Question",
+                  nodes: [
+                    {
+                      id: "demand",
+                      label: "Demand",
+                      claim: "Demand remains strong.",
+                      whyItMatters: "Demand matters.",
+                      weight: 1,
+                      evidenceNeeded: ["Demand"],
+                      counterEvidenceNeeded: ["Slowdown"]
+                    }
+                  ]
+                }
+              }
+            ]),
+            { headers: { "Content-Type": "application/x-ndjson" } }
+          );
+        }
+        throw new Error(`Unexpected fetch ${url}`);
+      })
+    );
+
+    render(<LiveResearchWorkbench />);
+
+    fireEvent.click(screen.getByRole("button", { name: "NVIDIA / NVDA" }));
+    fireEvent.change(screen.getByLabelText("Research question"), {
+      target: {
+        value: "Is NVIDIA's current valuation justified by AI growth fundamentals?"
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run Deep Research" }));
+
+    const shell = screen.getByRole("main");
+    await screen.findByRole("separator", { name: "Resize agent and workspace columns" });
+    const before = shell.style.gridTemplateColumns;
+
+    fireEvent.mouseDown(
+      screen.getByRole("separator", { name: "Resize agent and workspace columns" }),
+      { clientX: 320 }
+    );
+    fireEvent.mouseMove(window, { clientX: 380 });
+    fireEvent.mouseUp(window);
+
+    expect(shell.style.gridTemplateColumns).not.toEqual(before);
+  });
+
   it("runs a streamed agent workflow and links memo trace to evidence", async () => {
     vi.stubGlobal(
       "fetch",
@@ -142,5 +254,104 @@ describe("LiveResearchWorkbench", () => {
 
     const evidencePanel = screen.getByRole("region", { name: "Evidence cards" });
     expect(within(evidencePanel).getByText("NVIDIA earnings")).toBeInTheDocument();
+  });
+
+  it("shows a server error instead of silently ignoring a failed run response", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/research/status")) {
+        return Response.json({
+          liveAvailable: true,
+          model: "mirothinker-1-7-deepresearch",
+          fallbackAvailable: true
+        });
+      }
+      if (url.includes("/api/research/run")) {
+        return Response.json({ error: "Invalid research request." }, { status: 400 });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<LiveResearchWorkbench />);
+
+    fireEvent.click(screen.getByRole("button", { name: "NVIDIA / NVDA" }));
+    fireEvent.change(screen.getByLabelText("Research question"), {
+      target: {
+        value: "Is NVIDIA's current valuation justified by AI growth fundamentals?"
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run Deep Research" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Invalid research request."
+    );
+    await waitFor(() => expect(screen.getAllByText("failed")).toHaveLength(7));
+    const runCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).includes("/api/research/run")
+    );
+    expect(runCall).toBeDefined();
+  });
+
+  it("removes UI-only security fields before sending the research request", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/research/status")) {
+        return Response.json({
+          liveAvailable: true,
+          model: "mirothinker-1-7-deepresearch",
+          fallbackAvailable: true
+        });
+      }
+      if (url.includes("/api/research/run")) {
+        return new Response(
+          streamFromLines([
+            { type: "run-started", runId: "run-clean", mode: "live-agent" },
+            {
+              type: "run-completed",
+              run: { runId: "run-clean", mode: "live-agent", phases: [], artifacts: [] }
+            }
+          ]),
+          { headers: { "Content-Type": "application/x-ndjson" } }
+        );
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    vi.stubGlobal(
+      "fetch",
+      fetchMock
+    );
+
+    render(<LiveResearchWorkbench />);
+
+    fireEvent.click(screen.getByRole("button", { name: "NVIDIA / NVDA" }));
+    fireEvent.change(screen.getByLabelText("Research question"), {
+      target: {
+        value: "Is NVIDIA's current valuation justified by AI growth fundamentals?"
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run Deep Research" }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).includes("/api/research/run")
+        )
+      ).toBe(true)
+    );
+    const runCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).includes("/api/research/run")
+    );
+    const init = runCall?.[1] as RequestInit;
+    const body = JSON.parse(String(init.body));
+
+    expect(body.security).toEqual({
+      name: "NVIDIA Corporation",
+      ticker: "NVDA",
+      exchange: "NASDAQ",
+      country: "US",
+      assetType: "Equity"
+    });
+    expect(body.security).not.toHaveProperty("displayName");
   });
 });

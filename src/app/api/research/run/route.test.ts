@@ -82,6 +82,26 @@ describe("POST /api/research/run", () => {
     expect(text).toContain("MiroMind API key is required");
     expect(text).not.toContain('"type":"artifact"');
   });
+
+  it("falls back to the curated NVIDIA demo when live MiroMind fails", async () => {
+    process.env.MIROMIND_API_KEY = "test-key";
+    process.env.MIROMIND_BASE_URL = "http://127.0.0.1:9";
+
+    const response = await POST(
+      new Request("http://localhost/api/research/run", {
+        method: "POST",
+        body: JSON.stringify(requestBody)
+      })
+    );
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(text).toContain('"mode":"live-agent"');
+    expect(text).toContain('"mode":"demo-fallback"');
+    expect(text).toContain('"type":"artifact"');
+    expect(text).toContain('"finalStance":"Partially Supported"');
+    expect(text).not.toContain('"type":"run-failed"');
+  });
 });
 
 function restoreEnv(key: string, value: string | undefined) {

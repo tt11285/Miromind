@@ -53,6 +53,33 @@ const demoSecurities: Array<ListedSecurity & { displayName: string }> = [
   }
 ];
 
+const suggestedQuestionsByTicker: Record<string, string[]> = {
+  NVDA: [
+    "Is NVIDIA's current valuation justified by AI growth fundamentals?",
+    "Can NVIDIA sustain data center growth if hyperscaler capex normalizes?",
+    "How much downside risk does NVIDIA face from AI chip competition?",
+    "Is NVIDIA's software and networking moat strong enough to defend margins?"
+  ],
+  MSFT: [
+    "Is Microsoft's valuation justified by Azure and AI monetization growth?",
+    "Can Copilot adoption materially expand Microsoft's revenue per user?",
+    "How exposed is Microsoft to a slowdown in enterprise AI spending?",
+    "Does Microsoft's AI infrastructure investment create enough return on capital?"
+  ],
+  MU: [
+    "Is Micron's valuation justified by HBM-driven AI memory demand?",
+    "Can Micron sustain pricing power through the next memory cycle?",
+    "How much of Micron's upside depends on AI server demand versus traditional memory recovery?",
+    "Is Micron's margin profile structurally improving or cyclically peaking?"
+  ],
+  TSLA: [
+    "Is Tesla's valuation justified by autonomous driving and robotaxi optionality?",
+    "Can Tesla defend EV margins as competition and pricing pressure increase?",
+    "How much should investors value Tesla's energy storage growth?",
+    "Does Tesla's current valuation rely too heavily on non-automotive future businesses?"
+  ]
+};
+
 export function AgentInputPanel({
   isRunning,
   modeLabel,
@@ -62,6 +89,7 @@ export function AgentInputPanel({
   const [results, setResults] = useState<ListedSecurity[]>([]);
   const [security, setSecurity] = useState<ListedSecurity | null>(null);
   const [question, setQuestion] = useState("");
+  const [suggestedQuestion, setSuggestedQuestion] = useState("");
   const [timeHorizon, setTimeHorizon] = useState<TimeHorizon>("12M");
   const [researchDepth, setResearchDepth] = useState<ResearchDepth>("deep");
   const [evidencePreference, setEvidencePreference] =
@@ -84,8 +112,12 @@ export function AgentInputPanel({
     setSecurity(item);
     setQuery(`${item.name} (${item.ticker})`);
     setResults([]);
+    setSuggestedQuestion("");
   }
 
+  const suggestedQuestions = security
+    ? suggestedQuestionsByTicker[security.ticker] ?? []
+    : [];
   const canRun = Boolean(security) && question.trim().length > 0 && !isRunning;
   const runHelpText = !security
     ? "Select a listed company and enter a research question to run."
@@ -146,10 +178,36 @@ export function AgentInputPanel({
         Research question
         <textarea
           value={question}
-          onChange={(event) => setQuestion(event.target.value)}
+          onChange={(event) => {
+            setQuestion(event.target.value);
+            setSuggestedQuestion("");
+          }}
           placeholder={`Example: ${exampleQuestion}`}
         />
       </label>
+
+      {suggestedQuestions.length > 0 ? (
+        <label>
+          Suggested questions
+          <select
+            value={suggestedQuestion}
+            onChange={(event) => {
+              const value = event.target.value;
+              setSuggestedQuestion(value);
+              if (value) {
+                setQuestion(value);
+              }
+            }}
+          >
+            <option value="">Choose a suggested question</option>
+            {suggestedQuestions.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
       <label>
         Time horizon
