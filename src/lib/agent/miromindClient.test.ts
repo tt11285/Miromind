@@ -220,6 +220,33 @@ describe("createMiroMindStageClient", () => {
     );
   });
 
+  it("times out stalled requests", async () => {
+    vi.useFakeTimers();
+    const fetchImpl = vi.fn((_url: RequestInfo | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("Aborted", "AbortError"));
+        });
+      })
+    );
+    const client = createMiroMindStageClient({
+      apiKey: "key",
+      model: "model",
+      baseUrl: "https://api.miromind.ai/v1",
+      fetchImpl,
+      requestTimeoutMs: 1000
+    });
+
+    const request = client.completeJson("Evidence Planning", "prompt", schema);
+    const assertion = expect(request).rejects.toThrow(
+      "MiroMind Evidence Planning primary request timed out after 1000ms."
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await assertion;
+    vi.useRealTimers();
+  });
+
   it("throws a clear error when assistant content is missing", async () => {
     const fetchImpl = vi.fn(async () =>
       new Response(JSON.stringify({ choices: [{ message: {} }] }))

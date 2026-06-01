@@ -20,76 +20,7 @@ const request: AgentRequest = {
 
 describe("runAgent", () => {
   it("streams live events in order", async () => {
-    const stageClient = {
-      completeJson: vi
-        .fn()
-        .mockResolvedValueOnce({
-          securityName: "NVIDIA Corporation",
-          ticker: "NVDA",
-          sectorFrame: "AI accelerators",
-          rootQuestion: request.question,
-          researchObjective: "Assess valuation support.",
-          decisionCriteria: ["Revenue durability"],
-          evidenceCategories: ["Earnings"],
-          safetyNote: "Research assistance only."
-        })
-        .mockResolvedValueOnce({
-          rootQuestion: request.question,
-          nodes: [
-            createNode("demand", "Demand Sustainability"),
-            createNode("margin", "Margin Durability"),
-            createNode("moat", "Competitive Moat"),
-            createNode("valuation", "Valuation Sensitivity")
-          ]
-        })
-        .mockResolvedValueOnce({
-          items: [
-            {
-              nodeId: "demand",
-              researchQuestions: ["Is AI demand durable?"],
-              preferredSourceTypes: ["earnings"],
-              sourceCandidates: ["NVIDIA earnings"],
-              supportingSignals: ["Strong demand"],
-              refutingSignals: ["Order slowdown"]
-            }
-          ]
-        })
-        .mockResolvedValueOnce({
-          evidenceCards: [
-            {
-              id: "ev-1",
-              nodeId: "demand",
-              sourceTitle: "NVIDIA earnings",
-              sourceType: "earnings",
-              sourceDate: "2026-02-25",
-              urlOrReference: "https://investor.nvidia.com/",
-              provenanceStatus: "model-reported",
-              quotedSnippet: "Demand strong.",
-              extractedFact: "AI demand remains strong.",
-              direction: "supports",
-              reasoningImpact: "Supports demand."
-            }
-          ]
-        })
-        .mockResolvedValueOnce({
-          executiveSummary: "The thesis is partially supported.",
-          finalStance: "Partially Supported",
-          confidence: "Medium",
-          keyDrivers: ["Demand"],
-          biggestCounterargument: "Valuation sensitivity.",
-          whatWouldChangeTheView: ["Demand slowdown"],
-          humanReviewChecklist: ["Verify filings"],
-          sections: [
-            {
-              id: "demand",
-              title: "Demand Sustainability",
-              body: "Demand supports the thesis.",
-              linkedNodeIds: ["demand"],
-              linkedEvidenceIds: ["ev-1"]
-            }
-          ]
-        })
-    };
+    const stageClient = createStageClient();
 
     const events = [];
     for await (const event of runAgent(request, { stageClient, runId: "run-live" })) {
@@ -104,7 +35,7 @@ describe("runAgent", () => {
     expect(events.filter((event) => event.type === "phase-started")).toHaveLength(7);
     expect(events.some((event) => event.type === "artifact")).toBe(true);
     expect(events.at(-1)?.type).toBe("run-completed");
-    expect(stageClient.completeJson).toHaveBeenCalledTimes(5);
+    expect(stageClient.calls).toHaveLength(6);
   });
 
   it("emits a run-completed event that satisfies the agent event schema", async () => {
@@ -189,38 +120,6 @@ describe("runAgent", () => {
         schema: { parse(value: unknown): T }
       ): Promise<T> {
         let value: unknown;
-        if (stageName === "Task Framing") {
-          value = {
-            securityName: "NVIDIA Corporation",
-            ticker: "NVDA",
-            sectorFrame: "AI accelerators",
-            rootQuestion: request.question,
-            researchObjective: "Assess valuation support.",
-            decisionCriteria: ["Revenue durability"],
-            evidenceCategories: ["Earnings"],
-            safetyNote: "Research assistance only."
-          };
-          return schema.parse(value);
-        }
-
-        if (stageName === "Hypothesis Generation") {
-          value = {
-            rootQuestion: request.question,
-            nodes: [
-              createNode("demand", "Demand Sustainability"),
-              createNode("margin", "Margin Durability"),
-              createNode("moat", "Competitive Moat"),
-              createNode("valuation", "Valuation Sensitivity")
-            ]
-          };
-          return schema.parse(value);
-        }
-
-        if (stageName === "Evidence Planning") {
-          value = { items: evidenceItems };
-          return schema.parse(value);
-        }
-
         if (stageName === "Evidence Research") {
           evidencePrompts.push(prompt);
           activeEvidenceCalls += 1;
@@ -269,16 +168,40 @@ describe("runAgent", () => {
       (event) => event.type === "artifact" && event.artifact.type === "evidence-cards"
     );
 
-    expect(evidencePrompts).toHaveLength(evidenceItems.length);
+    expect(evidencePrompts).toHaveLength(5);
     expect(maxActiveEvidenceCalls).toBeGreaterThan(1);
-    expect(evidenceArtifactEvents).toHaveLength(evidenceItems.length);
+    expect(evidenceArtifactEvents).toHaveLength(5);
     expect(
       evidenceArtifactEvents.map((event) =>
         event.type === "artifact" && event.artifact.type === "evidence-cards"
           ? event.artifact.evidenceCards.length
           : 0
       )
-    ).toEqual([1, 2, 3]);
+    ).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("completes the run with unavailable evidence and fallback memo when live research calls fail", async () => {
+    const stageClient = {
+      async completeJson<T>(): Promise<T> {
+        throw new Error("MiroMind request timed out.");
+      }
+    };
+    const events = [];
+
+    for await (const event of runAgent(request, { stageClient, runId: "run-timeboxed" })) {
+      events.push(event);
+    }
+
+    const completed = events.at(-1);
+
+    expect(completed?.type).toBe("run-completed");
+    if (completed?.type !== "run-completed") {
+      throw new Error("Expected a completed run.");
+    }
+    expect(completed.run.evidenceCards?.every((card) => card.provenanceStatus === "unavailable"))
+      .toBe(true);
+    expect(completed.run.memo?.executiveSummary).toContain("completed with limited live evidence");
+    expect(completed.run.phases.every((phase) => phase.status === "complete")).toBe(true);
   });
 });
 
@@ -322,74 +245,45 @@ function createEvidenceCard(nodeId: string) {
 }
 
 function createStageClient() {
+  const calls: string[] = [];
+
   return {
-    completeJson: vi
-      .fn()
-      .mockResolvedValueOnce({
-        securityName: "NVIDIA Corporation",
-        ticker: "NVDA",
-        sectorFrame: "AI accelerators",
-        rootQuestion: request.question,
-        researchObjective: "Assess valuation support.",
-        decisionCriteria: ["Revenue durability"],
-        evidenceCategories: ["Earnings"],
-        safetyNote: "Research assistance only."
-      })
-      .mockResolvedValueOnce({
-        rootQuestion: request.question,
-        nodes: [
-          createNode("demand", "Demand Sustainability"),
-          createNode("margin", "Margin Durability"),
-          createNode("moat", "Competitive Moat"),
-          createNode("valuation", "Valuation Sensitivity")
-        ]
-      })
-      .mockResolvedValueOnce({
-        items: [
-          {
-            nodeId: "demand",
-            researchQuestions: ["Is AI demand durable?"],
-            preferredSourceTypes: ["earnings"],
-            sourceCandidates: ["NVIDIA earnings"],
-            supportingSignals: ["Strong demand"],
-            refutingSignals: ["Order slowdown"]
-          }
-        ]
-      })
-      .mockResolvedValueOnce({
-        evidenceCards: [
-          {
-            id: "ev-1",
-            nodeId: "demand",
-            sourceTitle: "NVIDIA earnings",
-            sourceType: "earnings",
-            sourceDate: "2026-02-25",
-            urlOrReference: "https://investor.nvidia.com/",
-            provenanceStatus: "model-reported",
-            quotedSnippet: "Demand strong.",
-            extractedFact: "AI demand remains strong.",
-            direction: "supports",
-            reasoningImpact: "Supports demand."
-          }
-        ]
-      })
-      .mockResolvedValueOnce({
-        executiveSummary: "The thesis is partially supported.",
-        finalStance: "Partially Supported",
-        confidence: "Medium",
-        keyDrivers: ["Demand"],
-        biggestCounterargument: "Valuation sensitivity.",
-        whatWouldChangeTheView: ["Demand slowdown"],
-        humanReviewChecklist: ["Verify filings"],
-        sections: [
-          {
-            id: "demand",
-            title: "Demand Sustainability",
-            body: "Demand supports the thesis.",
-            linkedNodeIds: ["demand"],
-            linkedEvidenceIds: ["ev-1"]
-          }
-        ]
-      })
+    calls,
+    async completeJson<T>(
+      stageName: string,
+      prompt: string,
+      schema: { parse(value: unknown): T }
+    ): Promise<T> {
+      calls.push(stageName);
+      if (stageName === "Evidence Research") {
+        const nodeId = prompt.match(/"nodeId":"([^"]+)"/)?.[1] ?? "unknown";
+        return schema.parse({
+          evidenceCards: [createEvidenceCard(nodeId)]
+        });
+      }
+
+      if (stageName === "Reasoning Synthesis") {
+        return schema.parse({
+          executiveSummary: "The thesis is partially supported.",
+          finalStance: "Partially Supported",
+          confidence: "Medium",
+          keyDrivers: ["Demand"],
+          biggestCounterargument: "Valuation sensitivity.",
+          whatWouldChangeTheView: ["Demand slowdown"],
+          humanReviewChecklist: ["Verify filings"],
+          sections: [
+            {
+              id: "demand",
+              title: "Demand Sustainability",
+              body: "Demand supports the thesis.",
+              linkedNodeIds: ["demand"],
+              linkedEvidenceIds: ["ev-1"]
+            }
+          ]
+        });
+      }
+
+      throw new Error(`Unexpected stage ${stageName}`);
+    }
   };
 }

@@ -33,6 +33,7 @@ export async function POST(request: Request): Promise<Response> {
   const apiKey = process.env.MIROMIND_API_KEY;
   const model = process.env.MIROMIND_MODEL ?? "mirothinker-1-7-deepresearch";
   const baseUrl = process.env.MIROMIND_BASE_URL ?? "https://api.miromind.ai/v1";
+  const requestTimeoutMs = Number(process.env.MIROMIND_REQUEST_TIMEOUT_MS ?? 30000);
   const runId = crypto.randomUUID();
 
   const stream = new ReadableStream<Uint8Array>({
@@ -64,6 +65,7 @@ export async function POST(request: Request): Promise<Response> {
           apiKey,
           model,
           baseUrl,
+          requestTimeoutMs,
           onMetric: (metric) => {
             controller.enqueue(encodeEvent({ type: "telemetry", metric }));
           }

@@ -4,11 +4,13 @@ import { POST } from "./route";
 const originalKey = process.env.MIROMIND_API_KEY;
 const originalModel = process.env.MIROMIND_MODEL;
 const originalBaseUrl = process.env.MIROMIND_BASE_URL;
+const originalTimeout = process.env.MIROMIND_REQUEST_TIMEOUT_MS;
 
 afterEach(() => {
   restoreEnv("MIROMIND_API_KEY", originalKey);
   restoreEnv("MIROMIND_MODEL", originalModel);
   restoreEnv("MIROMIND_BASE_URL", originalBaseUrl);
+  restoreEnv("MIROMIND_REQUEST_TIMEOUT_MS", originalTimeout);
 });
 
 const requestBody = {
@@ -83,9 +85,10 @@ describe("POST /api/research/run", () => {
     expect(text).not.toContain('"type":"artifact"');
   });
 
-  it("falls back to the curated NVIDIA demo when live MiroMind fails", async () => {
+  it("completes a live run with auditable fallback artifacts when live MiroMind fails", async () => {
     process.env.MIROMIND_API_KEY = "test-key";
     process.env.MIROMIND_BASE_URL = "http://127.0.0.1:9";
+    process.env.MIROMIND_REQUEST_TIMEOUT_MS = "50";
 
     const response = await POST(
       new Request("http://localhost/api/research/run", {
@@ -97,9 +100,10 @@ describe("POST /api/research/run", () => {
 
     expect(response.status).toBe(200);
     expect(text).toContain('"mode":"live-agent"');
-    expect(text).toContain('"mode":"demo-fallback"');
     expect(text).toContain('"type":"artifact"');
-    expect(text).toContain('"finalStance":"Partially Supported"');
+    expect(text).toContain("completed with limited live evidence");
+    expect(text).toContain('"provenanceStatus":"unavailable"');
+    expect(text).toContain('"type":"run-completed"');
     expect(text).not.toContain('"type":"run-failed"');
   });
 });

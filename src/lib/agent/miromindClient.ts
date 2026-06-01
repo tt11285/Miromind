@@ -10,6 +10,7 @@ interface CreateMiroMindStageClientOptions {
   fetchImpl?: FetchImpl;
   now?: () => number;
   onMetric?: (metric: MiroMindRequestMetric) => void;
+  requestTimeoutMs?: number;
 }
 
 interface ChatCompletionResponse {
@@ -35,6 +36,7 @@ export function createMiroMindStageClient(
 ) {
   const fetchImpl = options.fetchImpl ?? fetch;
   const now = options.now ?? Date.now;
+  const requestTimeoutMs = options.requestTimeoutMs ?? 30000;
   const url = `${options.baseUrl.replace(/\/$/, "")}/chat/completions`;
 
   async function requestContent(
@@ -43,9 +45,12 @@ export function createMiroMindStageClient(
     prompt: string
   ): Promise<string> {
     const startedAt = now();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
     try {
       const response = await fetchImpl(url, {
         method: "POST",
+        signal: controller.signal,
         headers: {
           Authorization: `Bearer ${options.apiKey}`,
           "Content-Type": "application/json"
@@ -77,15 +82,20 @@ export function createMiroMindStageClient(
       });
       return content;
     } catch (error) {
+      const formattedError = controller.signal.aborted
+        ? `MiroMind ${stageName} ${attempt} request timed out after ${requestTimeoutMs}ms.`
+        : formatFailure(error);
       options.onMetric?.({
         kind: "miromind-request",
         stageName,
         attempt,
         durationMs: Math.max(0, now() - startedAt),
         status: "failed",
-        error: formatFailure(error)
+        error: formattedError
       });
-      throw error;
+      throw new Error(formattedError);
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
