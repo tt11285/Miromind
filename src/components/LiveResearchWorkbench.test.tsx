@@ -198,7 +198,7 @@ describe("LiveResearchWorkbench", () => {
 
     expect(screen.getByRole("button", { name: "Running Research" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Running Research" })).not.toHaveClass("launching");
-    expect(screen.getByRole("main")).toHaveClass("launching-active");
+    expect(screen.getByRole("main")).toHaveClass("running-active");
     expect(await screen.findByText("Task Framing")).toBeInTheDocument();
     expect(screen.queryByText("Hypothesis Generation")).not.toBeInTheDocument();
     expect(screen.getByText("Thinking")).toBeInTheDocument();
@@ -209,7 +209,7 @@ describe("LiveResearchWorkbench", () => {
     expect(await screen.findByText("Evidence Research")).toBeInTheDocument();
     holdEvidence = false;
     evidenceResolvers.splice(0).forEach((resolve) => resolve());
-    expect(await screen.findByText("Deep Research complete")).toBeInTheDocument();
+    expect(await screen.findByText("Deep Research complete", {}, { timeout: 3000 })).toBeInTheDocument();
   });
 
   it("runs evidence tasks as separate requests with frontend concurrency capped at 2", async () => {
@@ -267,7 +267,7 @@ describe("LiveResearchWorkbench", () => {
       resolve(Response.json({ evidenceCards: [evidenceForNode(evidencePlan.items[4].nodeId)] }));
     });
 
-    expect(await screen.findByText("Deep Research complete")).toBeInTheDocument();
+    expect(await screen.findByText("Deep Research complete", {}, { timeout: 3000 })).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([input]) => String(input).includes("/api/research/evidence"))).toHaveLength(5);
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/research/run"))).toBe(false);
   });
@@ -308,7 +308,7 @@ describe("LiveResearchWorkbench", () => {
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/research/synthesis"))).toBe(false);
 
     await waitFor(() => expect(firstNodeAttempts).toBe(2), { timeout: 7000 });
-    expect(await screen.findByText("Deep Research complete")).toBeInTheDocument();
+    expect(await screen.findByText("Deep Research complete", {}, { timeout: 3000 })).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/research/synthesis"))).toBe(true);
   }, 8000);
 
@@ -318,7 +318,7 @@ describe("LiveResearchWorkbench", () => {
     render(<LiveResearchWorkbench />);
     runDefaultQuestion();
 
-    expect(await screen.findByText("Partially Supported")).toBeInTheDocument();
+    expect(await screen.findByText("Partially Supported", {}, { timeout: 3000 })).toBeInTheDocument();
     const memoPanel = screen.getByRole("region", { name: "Investment memo" });
     fireEvent.click(
       within(memoPanel).getByRole("button", { name: /Revenue Growth/ })

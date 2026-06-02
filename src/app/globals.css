@@ -109,7 +109,8 @@ select {
 .workspace,
 .trace-column > section,
 .timeline,
-.memo-panel {
+.memo-panel,
+.memo-span {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -532,7 +533,13 @@ textarea {
   width: 28px;
 }
 
+.memo-span {
+  grid-column: 3 / 6;
+  min-width: 0;
+}
+
 .memo-panel {
+  border: 0;
   box-shadow: none;
   padding: 16px;
 }
@@ -612,7 +619,7 @@ textarea {
 .tree-list,
 .evidence-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .tree-node {
@@ -621,6 +628,41 @@ textarea {
   gap: 5px;
   padding: 12px;
   text-align: left;
+}
+
+.stack-card {
+  position: relative;
+  box-shadow: 0 5px 0 -2px #eef3f8, 0 10px 0 -5px #d9e0ea;
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.stack-card[aria-expanded="true"] {
+  box-shadow: 0 7px 18px rgba(16, 24, 39, 0.08);
+  transform: translateY(-1px);
+}
+
+.stack-card-title {
+  font-weight: 800;
+}
+
+.stack-card-detail {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 7px;
+  margin-top: 7px;
+  padding-top: 8px;
+}
+
+.stack-card-detail p,
+.stack-card-detail small,
+.stack-card-detail blockquote {
+  color: var(--muted);
+  margin: 0;
+}
+
+.stack-card-detail blockquote {
+  border-left: 3px solid #cfe3ff;
+  padding-left: 8px;
 }
 
 .tree-node strong {
@@ -645,15 +687,30 @@ textarea {
   background: #f7fbff;
   border: 1px solid #cfe3ff;
   border-radius: 8px;
+  color: var(--ink);
   margin-bottom: 12px;
   padding: 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.reasoning-note > span {
+  color: var(--blue);
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 4px;
 }
 
 .evidence-card {
+  border: 1px solid var(--line);
   border-left: 4px solid var(--muted);
   border-radius: 8px;
   background: var(--field);
+  cursor: pointer;
   padding: 12px;
+  text-align: left;
+  width: 100%;
 }
 
 .evidence-card.supports {
@@ -697,6 +754,10 @@ textarea {
   .trace-column {
     grid-column: 1 / -1;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .memo-span {
+    grid-column: 1 / -1;
   }
 }
 

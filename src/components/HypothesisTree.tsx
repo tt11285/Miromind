@@ -1,4 +1,7 @@
+"use client";
+
 import type { HypothesisNodeDraft } from "@/lib/agent/types";
+import { useState } from "react";
 
 interface HypothesisTreeProps {
   nodes: HypothesisNodeDraft[];
@@ -13,6 +16,8 @@ export function HypothesisTree({
   selectedNodeId,
   onSelectNode
 }: HypothesisTreeProps) {
+  const [expandedNodeId, setExpandedNodeId] = useState<string | null>(null);
+
   return (
     <section className="tree-panel" aria-label="Hypothesis tree">
       <div className="panel-heading">
@@ -22,22 +27,33 @@ export function HypothesisTree({
       <div className="tree-list">
         {nodes.map((node) => (
           <button
+            aria-expanded={expandedNodeId === node.id}
             aria-pressed={selectedNodeId === node.id}
             className={[
               "tree-node",
+              expandedNodeId === node.id ? "expanded" : "collapsed",
               selectedNodeId === node.id ? "selected" : "",
               highlightedNodeIds.includes(node.id) ? "highlighted" : ""
             ].join(" ")}
             key={node.id}
-            onClick={() => onSelectNode(node.id)}
+            onClick={() => {
+              setExpandedNodeId((current) => (current === node.id ? null : node.id));
+              onSelectNode(node.id);
+            }}
             type="button"
           >
-            <span>{node.label}</span>
+            <span className="stack-card-title">{node.label}</span>
             <strong>{Math.round(node.weight * 100)}% weight</strong>
-            <small>
-              {node.evidenceNeeded.length} evidence needs |{" "}
-              {node.counterEvidenceNeeded.length} counter checks
-            </small>
+            {expandedNodeId === node.id ? (
+              <div className="stack-card-detail">
+                <p>{node.claim}</p>
+                <small>{node.whyItMatters}</small>
+                <small>
+                  {node.evidenceNeeded.length} evidence needs |{" "}
+                  {node.counterEvidenceNeeded.length} counter checks
+                </small>
+              </div>
+            ) : null}
           </button>
         ))}
       </div>

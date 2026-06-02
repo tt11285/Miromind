@@ -19,7 +19,7 @@ import { EvidencePanel } from "./EvidencePanel";
 import { HypothesisTree } from "./HypothesisTree";
 import { InvestmentMemo } from "./InvestmentMemo";
 
-type WorkbenchStage = "intro" | "launching" | "running" | "complete" | "error";
+type WorkbenchStage = "intro" | "running" | "complete" | "error";
 
 interface PlanResponse {
   taskFrame: TaskFrameArtifact;
@@ -35,6 +35,11 @@ interface EvidenceTaskResponse {
 interface SynthesisResponse {
   memo: MemoArtifact;
   telemetry?: AgentTelemetryMetric[];
+}
+
+interface EvidenceQueueCallbacks {
+  onProgress?: (completedCount: number) => void;
+  onRetry?: (message: string) => void;
 }
 
 type DragState = {
@@ -198,18 +203,6 @@ export function LiveResearchWorkbench() {
   }, []);
 
   useEffect(() => {
-    if (workbenchStage !== "launching") {
-      return;
-    }
-
-    const launchTimer = window.setTimeout(() => {
-      setWorkbenchStage((current) => (current === "launching" ? "running" : current));
-    }, 850);
-
-    return () => window.clearTimeout(launchTimer);
-  }, [workbenchStage]);
-
-  useEffect(() => {
     if (!dragState) {
       return;
     }
@@ -255,7 +248,7 @@ export function LiveResearchWorkbench() {
   }
 
   async function handleRun(request: AgentRequest) {
-    setWorkbenchStage("launching");
+    setWorkbenchStage("running");
     setIsRunning(true);
     setError(null);
     setTree(null);
@@ -272,22 +265,58 @@ export function LiveResearchWorkbench() {
 
       updatePhase("Task Framing", "running", "Reading the question and framing the decision.");
       const plan = await postJson<PlanResponse>("/api/research/plan", cleanedRequest);
+      let evidenceProgressVisible = false;
+      let completedEvidenceCount = 0;
+      let latestEvidenceMessage = "";
+      const evidencePromise = runEvidenceQueue(
+        cleanedRequest,
+        plan.evidencePlan,
+        {
+          onProgress: (completedCount) => {
+          completedEvidenceCount = completedCount;
+          if (evidenceProgressVisible) {
+            updatePhase(
+              "Evidence Research",
+              "running",
+              `${completedCount}/${plan.evidencePlan.items.length} evidence tasks complete.`
+            );
+          }
+          },
+          onRetry: (message) => {
+            latestEvidenceMessage = message;
+            if (evidenceProgressVisible) {
+              updatePhase("Evidence Research", "running", message);
+            }
+          }
+        }
+      );
+
       updatePhase("Task Framing", "complete", "Research task framed.");
+      await delay(120);
 
       updatePhase("Hypothesis Generation", "running", "Building the hypothesis tree.");
       setTree(plan.hypothesisTree);
-      setSelectedNodeId(plan.hypothesisTree.nodes[0]?.id ?? null);
+      setSelectedNodeId(null);
+      await delay(180);
       updatePhase("Hypothesis Generation", "complete", "Hypothesis tree generated.");
+      await delay(90);
 
       updatePhase("Evidence Planning", "running", "Planning source checks.");
+      await delay(140);
       updatePhase("Evidence Planning", "complete", "Evidence plan generated.");
+      await delay(80);
 
+      evidenceProgressVisible = true;
       updatePhase(
         "Evidence Research",
         "running",
-        `Running ${plan.evidencePlan.items.length} evidence tasks with 2 concurrent workers.`
+        latestEvidenceMessage
+          ? latestEvidenceMessage
+          : completedEvidenceCount > 0
+          ? `${completedEvidenceCount}/${plan.evidencePlan.items.length} evidence tasks complete.`
+          : `Running ${plan.evidencePlan.items.length} evidence tasks with 2 concurrent workers.`
       );
-      const evidenceCards = await runEvidenceQueue(cleanedRequest, plan.evidencePlan);
+      const evidenceCards = await evidencePromise;
       const evidenceArtifact: EvidenceCardsArtifact = {
         type: "evidence-cards",
         evidenceCards
@@ -327,7 +356,8 @@ export function LiveResearchWorkbench() {
 
   async function runEvidenceQueue(
     request: AgentRequest,
-    evidencePlan: EvidencePlanArtifact
+    evidencePlan: EvidencePlanArtifact,
+    callbacks: EvidenceQueueCallbacks = {}
   ): Promise<AgentEvidenceCard[]> {
     const limit = pLimit(2);
     const completedGroups: AgentEvidenceCard[][] = Array.from({
@@ -337,7 +367,12 @@ export function LiveResearchWorkbench() {
 
     const tasks = evidencePlan.items.map((item, index) =>
       limit(async () => {
-        const result = await runEvidenceTaskUntilSuccess(request, item, index);
+        const result = await runEvidenceTaskUntilSuccess(
+          request,
+          item,
+          index,
+          callbacks.onRetry
+        );
         completedGroups[index] = result.evidenceCards;
         completedCount += 1;
         const mergedCards = completedGroups.flatMap((group) => group ?? []);
@@ -345,11 +380,7 @@ export function LiveResearchWorkbench() {
           type: "evidence-cards",
           evidenceCards: mergedCards
         });
-        updatePhase(
-          "Evidence Research",
-          "running",
-          `${completedCount}/${evidencePlan.items.length} evidence tasks complete.`
-        );
+        callbacks.onProgress?.(completedCount);
         appendTelemetry(result.telemetry);
       })
     );
@@ -361,7 +392,8 @@ export function LiveResearchWorkbench() {
   async function runEvidenceTaskUntilSuccess(
     request: AgentRequest,
     item: EvidencePlanArtifact["items"][number],
-    index: number
+    index: number,
+    onRetry?: (message: string) => void
   ): Promise<EvidenceTaskResponse> {
     let attempt = 1;
 
@@ -381,11 +413,7 @@ export function LiveResearchWorkbench() {
           `Evidence task ${index + 1} failed on attempt ${attempt}; retrying in 5 seconds.`,
           error
         );
-        updatePhase(
-          "Evidence Research",
-          "running",
-          `Task ${index + 1} attempt ${attempt} failed: ${message}. Retrying in 5 seconds.`
-        );
+        onRetry?.(`Task ${index + 1} attempt ${attempt} failed: ${message}. Retrying in 5 seconds.`);
         attempt += 1;
         await delay(5000);
       }
@@ -468,13 +496,7 @@ export function LiveResearchWorkbench() {
               <RunDiagnostics metrics={telemetryMetrics} />
             ) : null}
             {memo ? (
-              <InvestmentMemo
-                memo={memo}
-                onSectionSelect={(nodeIds) => {
-                  setHighlightedNodeIds(nodeIds);
-                  setSelectedNodeId(nodeIds[0] ?? null);
-                }}
-              />
+              null
             ) : null}
           </section>
           {showTraceColumn ? (
@@ -511,6 +533,17 @@ export function LiveResearchWorkbench() {
                 ) : null}
               </aside>
             </>
+          ) : null}
+          {memo ? (
+            <section className="memo-span progressive-panel">
+              <InvestmentMemo
+                memo={memo}
+                onSectionSelect={(nodeIds) => {
+                  setHighlightedNodeIds(nodeIds);
+                  setSelectedNodeId(nodeIds[0] ?? null);
+                }}
+              />
+            </section>
           ) : null}
         </>
       ) : null}
