@@ -10,11 +10,14 @@ import type {
   EvidencePlanArtifact,
   HypothesisTreeArtifact,
   MemoArtifact,
+  MemoClaim,
+  ScoredNodesArtifact,
   TaskFrameArtifact
 } from "@/lib/agent/types";
 import { useEffect, useState } from "react";
 import { AgentInputPanel } from "./AgentInputPanel";
 import { AgentRunTimeline } from "./AgentRunTimeline";
+import { AuditTrail } from "./AuditTrail";
 import { EvidencePanel } from "./EvidencePanel";
 import { HypothesisTree } from "./HypothesisTree";
 import { InvestmentMemo } from "./InvestmentMemo";
@@ -34,6 +37,7 @@ interface EvidenceTaskResponse {
 
 interface SynthesisResponse {
   memo: MemoArtifact;
+  scoredNodes: ScoredNodesArtifact;
   telemetry?: AgentTelemetryMetric[];
 }
 
@@ -181,9 +185,12 @@ export function LiveResearchWorkbench() {
   const [phases, setPhases] = useState<AgentPhase[]>(initialPhases);
   const [tree, setTree] = useState<HypothesisTreeArtifact | null>(null);
   const [evidence, setEvidence] = useState<EvidenceCardsArtifact | null>(null);
+  const [scoredNodes, setScoredNodes] = useState<ScoredNodesArtifact | null>(null);
   const [memo, setMemo] = useState<MemoArtifact | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [highlightedNodeIds, setHighlightedNodeIds] = useState<string[]>([]);
+  const [selectedClaim, setSelectedClaim] = useState<MemoClaim | null>(null);
+  const [focusedEvidenceIds, setFocusedEvidenceIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [telemetryMetrics, setTelemetryMetrics] = useState<AgentTelemetryMetric[]>([]);
   const [workbenchStage, setWorkbenchStage] = useState<WorkbenchStage>("intro");
@@ -253,9 +260,12 @@ export function LiveResearchWorkbench() {
     setError(null);
     setTree(null);
     setEvidence(null);
+    setScoredNodes(null);
     setMemo(null);
     setSelectedNodeId(null);
     setHighlightedNodeIds([]);
+    setSelectedClaim(null);
+    setFocusedEvidenceIds([]);
     setTelemetryMetrics([]);
     setPhases(initialPhases());
 
@@ -336,6 +346,7 @@ export function LiveResearchWorkbench() {
         evidenceCards
       });
       appendTelemetry(synthesis.telemetry);
+      setScoredNodes(synthesis.scoredNodes);
       updatePhase("Evidence Scoring", "complete", "Evidence scored.");
 
       updatePhase("Reasoning Synthesis", "running", "Synthesizing the investment memo.");
@@ -521,7 +532,12 @@ export function LiveResearchWorkbench() {
                     nodes={tree.nodes}
                     selectedNodeId={selectedNodeId}
                     highlightedNodeIds={highlightedNodeIds}
-                    onSelectNode={setSelectedNodeId}
+                    scoredNodes={scoredNodes?.nodes ?? []}
+                    onSelectNode={(nodeId) => {
+                      setSelectedNodeId(nodeId);
+                      setSelectedClaim(null);
+                      setFocusedEvidenceIds([]);
+                    }}
                   />
                 ) : null}
                 {evidence ? (
@@ -529,6 +545,7 @@ export function LiveResearchWorkbench() {
                     selectedNodeId={selectedNodeId}
                     nodes={tree?.nodes ?? []}
                     evidence={evidence.evidenceCards}
+                    focusedEvidenceIds={focusedEvidenceIds}
                   />
                 ) : null}
               </aside>
@@ -538,10 +555,19 @@ export function LiveResearchWorkbench() {
             <section className="memo-span progressive-panel">
               <InvestmentMemo
                 memo={memo}
-                onSectionSelect={(nodeIds) => {
-                  setHighlightedNodeIds(nodeIds);
-                  setSelectedNodeId(nodeIds[0] ?? null);
+                selectedClaimId={selectedClaim?.id ?? null}
+                onClaimSelect={(claim) => {
+                  setSelectedClaim(claim);
+                  setHighlightedNodeIds(claim.linkedNodeIds);
+                  setSelectedNodeId(claim.linkedNodeIds[0] ?? null);
+                  setFocusedEvidenceIds(claim.linkedEvidenceIds);
                 }}
+              />
+              <AuditTrail
+                claim={selectedClaim}
+                evidence={evidence?.evidenceCards ?? []}
+                nodes={tree?.nodes ?? []}
+                scoredNodes={scoredNodes?.nodes ?? []}
               />
             </section>
           ) : null}

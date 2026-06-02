@@ -1,5 +1,6 @@
 import { synthesisOutputSchema } from "./schemas";
 import { buildSynthesisPrompt } from "./prompts";
+import { attachMemoClaims } from "./memoClaims";
 import type {
   AgentEvidenceCard,
   AgentRequest,
@@ -113,11 +114,11 @@ export async function synthesizeMemoWithFallback(input: {
       }),
       synthesisOutputSchema
     );
-    return {
+    return attachMemoClaims({
       type: "memo",
       finalScore: input.scoredNodes.finalScore,
       ...synthesis
-    };
+    }, input.scoredNodes, input.evidence);
   } catch {
     return createFallbackMemo(input.taskFrame, input.evidence, input.scoredNodes);
   }
@@ -133,7 +134,7 @@ export function createFallbackMemo(
     .sort((left, right) => Math.abs(right.weightedScore) - Math.abs(left.weightedScore))
     .slice(0, 3);
 
-  return {
+  return attachMemoClaims({
     type: "memo",
     executiveSummary: `The run completed with limited live evidence after one or more MiroMind calls failed or timed out. Current score is ${scoredNodes.finalScore}, so the evidence-backed stance is ${scoredNodes.finalStance}. Treat unavailable evidence cards as audit flags before making any decision.`,
     finalStance: scoredNodes.finalStance,
@@ -157,7 +158,7 @@ export function createFallbackMemo(
       linkedNodeIds: [node.id],
       linkedEvidenceIds: [...node.supportingEvidenceIds, ...node.counterEvidenceIds]
     }))
-  };
+  }, scoredNodes, evidence);
 }
 
 function sectorFrameForTicker(ticker: string): string {

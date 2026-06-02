@@ -1,5 +1,6 @@
 import { createFixtureArtifacts } from "@/data/fixtures";
 import { scoreResearchArtifacts } from "@/lib/scoring";
+import { attachMemoClaims } from "./memoClaims";
 import type { EvidenceCard, ResearchTask } from "@/lib/types";
 import type {
   AgentEvidenceCard,
@@ -105,10 +106,10 @@ export function createFallbackRun(runId: string, request: AgentRequest): AgentRu
     finalStance: scored.memo.finalStance,
     confidence: scored.memo.confidence
   };
-  const memo: MemoArtifact = {
+  const memo: MemoArtifact = attachMemoClaims({
     type: "memo",
     ...scored.memo
-  };
+  }, scoredNodes, evidenceCards);
 
   return {
     runId,

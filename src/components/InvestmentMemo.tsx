@@ -1,11 +1,16 @@
-import type { MemoArtifact } from "@/lib/agent/types";
+import type { MemoArtifact, MemoClaim } from "@/lib/agent/types";
 
 interface InvestmentMemoProps {
   memo: MemoArtifact;
-  onSectionSelect: (nodeIds: string[]) => void;
+  selectedClaimId: string | null;
+  onClaimSelect: (claim: MemoClaim) => void;
 }
 
-export function InvestmentMemo({ memo, onSectionSelect }: InvestmentMemoProps) {
+export function InvestmentMemo({
+  memo,
+  selectedClaimId,
+  onClaimSelect
+}: InvestmentMemoProps) {
   return (
     <section className="memo-panel" aria-label="Investment memo">
       <div className="memo-hero">
@@ -55,13 +60,56 @@ export function InvestmentMemo({ memo, onSectionSelect }: InvestmentMemoProps) {
         <button
           className="trace-button"
           key={section.id}
-          onClick={() => onSectionSelect(section.linkedNodeIds)}
+          onClick={() =>
+            onClaimSelect({
+              id: `section-${section.id}`,
+              claimType: "section",
+              text: section.body,
+              linkedNodeIds: section.linkedNodeIds,
+              linkedEvidenceIds: section.linkedEvidenceIds
+            })
+          }
           type="button"
         >
           <span>{section.title}</span>
           <small>{section.body}</small>
         </button>
       ))}
+
+      <section className="claim-panel" aria-label="Memo claims">
+        <div className="panel-heading">
+          <p className="eyebrow">Claim-Level Trace</p>
+          <h3>Auditable Memo Claims</h3>
+        </div>
+        <div className="claim-list">
+          {memo.claims.map((claim) => (
+            <button
+              className={`claim-button ${selectedClaimId === claim.id ? "selected" : ""}`}
+              key={claim.id}
+              onClick={() => onClaimSelect(claim)}
+              type="button"
+            >
+              <span>{labelForClaimType(claim.claimType)}</span>
+              <strong>{claim.text}</strong>
+              <small>
+                {claim.linkedNodeIds.length} nodes | {claim.linkedEvidenceIds.length} evidence cards
+              </small>
+            </button>
+          ))}
+        </div>
+      </section>
     </section>
   );
+}
+
+function labelForClaimType(claimType: MemoClaim["claimType"]): string {
+  const labels: Record<MemoClaim["claimType"], string> = {
+    "executive-summary": "Executive",
+    driver: "Driver",
+    counterargument: "Counter",
+    "view-change": "Change",
+    "human-review": "Review",
+    section: "Section"
+  };
+  return labels[claimType];
 }

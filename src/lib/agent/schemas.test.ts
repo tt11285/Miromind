@@ -326,6 +326,18 @@ describe("agent schemas", () => {
           linkedNodeIds: ["demand-sustainability"],
           linkedEvidenceIds: ["ev-demand-1"]
         }
+      ],
+      claims: [
+        {
+          id: "claim-driver-demand",
+          claimType: "driver",
+          text: "Data center demand remains the central driver.",
+          linkedNodeIds: ["demand-sustainability"],
+          linkedEvidenceIds: ["ev-demand-1"],
+          stance: "supports",
+          confidence: "Medium-High",
+          score: 0.18
+        }
       ]
     };
 

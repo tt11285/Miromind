@@ -171,6 +171,25 @@ export interface MemoSectionArtifact {
   linkedEvidenceIds: string[];
 }
 
+export type MemoClaimType =
+  | "executive-summary"
+  | "driver"
+  | "counterargument"
+  | "view-change"
+  | "human-review"
+  | "section";
+
+export interface MemoClaim {
+  id: string;
+  claimType: MemoClaimType;
+  text: string;
+  linkedNodeIds: string[];
+  linkedEvidenceIds: string[];
+  stance?: NodeStance | FinalStance;
+  confidence?: Confidence;
+  score?: number;
+}
+
 export interface MemoArtifact {
   type: "memo";
   executiveSummary: string;
@@ -182,6 +201,7 @@ export interface MemoArtifact {
   whatWouldChangeTheView: string[];
   humanReviewChecklist: string[];
   sections: MemoSectionArtifact[];
+  claims: MemoClaim[];
 }
 
 export type AgentArtifact =

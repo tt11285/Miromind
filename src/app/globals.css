@@ -598,6 +598,49 @@ textarea {
   width: 100%;
 }
 
+.claim-panel {
+  border-top: 1px solid var(--line);
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.claim-list {
+  display: grid;
+  gap: 8px;
+}
+
+.claim-button {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-left: 4px solid #b7d4ff;
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  text-align: left;
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+  width: 100%;
+}
+
+.claim-button:hover,
+.claim-button.selected {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(11, 71, 161, 0.1);
+  transform: translateY(-1px);
+}
+
+.claim-button span {
+  color: var(--teal);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.claim-button small {
+  color: var(--muted);
+}
+
 .trace-column {
   display: grid;
   gap: 16px;
@@ -683,6 +726,21 @@ textarea {
   border-color: #f2c170;
 }
 
+.node-score-strip {
+  background: #f7fbff;
+  border: 1px solid #cfe3ff;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+}
+
+.node-score-strip span {
+  color: #344054;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .reasoning-note {
   background: #f7fbff;
   border: 1px solid #cfe3ff;
@@ -725,6 +783,12 @@ textarea {
   border-left-color: var(--amber);
 }
 
+.evidence-card.focused {
+  background: #fff8e8;
+  border-color: #f2c170;
+  box-shadow: 0 0 0 3px rgba(184, 107, 0, 0.12);
+}
+
 .evidence-card div {
   display: flex;
   gap: 8px;
@@ -734,6 +798,48 @@ textarea {
 .evidence-card span {
   color: var(--muted);
   font-size: 12px;
+}
+
+.audit-panel {
+  border-top: 1px solid var(--line);
+  margin: 0 16px 16px;
+  padding-top: 16px;
+}
+
+.audit-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.audit-grid article {
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.audit-row {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+}
+
+.audit-row p,
+.audit-row small,
+.audit-row blockquote {
+  color: var(--muted);
+  margin: 0;
+}
+
+.audit-row blockquote {
+  border-left: 3px solid var(--teal);
+  padding-left: 8px;
 }
 
 @media (max-width: 1120px) {
@@ -763,7 +869,8 @@ textarea {
 
 @media (max-width: 760px) {
   .trace-column,
-  .memo-grid {
+  .memo-grid,
+  .audit-grid {
     grid-template-columns: 1fr;
   }
 

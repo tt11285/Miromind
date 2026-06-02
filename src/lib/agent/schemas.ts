@@ -208,6 +208,24 @@ export const memoSectionArtifactSchema = z.object({
   linkedEvidenceIds: z.array(z.string().min(1))
 }).strict();
 
+export const memoClaimSchema = z.object({
+  id: z.string().min(1),
+  claimType: z.enum([
+    "executive-summary",
+    "driver",
+    "counterargument",
+    "view-change",
+    "human-review",
+    "section"
+  ]),
+  text: z.string().min(1),
+  linkedNodeIds: z.array(z.string().min(1)),
+  linkedEvidenceIds: z.array(z.string().min(1)),
+  stance: z.union([nodeStanceSchema, finalStanceSchema]).optional(),
+  confidence: confidenceSchema.optional(),
+  score: z.number().optional()
+}).strict();
+
 export const memoArtifactSchema = z.object({
   type: z.literal("memo"),
   executiveSummary: z.string().min(1),
@@ -218,7 +236,8 @@ export const memoArtifactSchema = z.object({
   biggestCounterargument: z.string().min(1),
   whatWouldChangeTheView: z.array(z.string().min(1)).min(1),
   humanReviewChecklist: z.array(z.string().min(1)).min(1),
-  sections: z.array(memoSectionArtifactSchema).min(1)
+  sections: z.array(memoSectionArtifactSchema).min(1),
+  claims: z.array(memoClaimSchema).min(1)
 }).strict();
 
 export const synthesisOutputSchema = z.object({

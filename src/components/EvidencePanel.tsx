@@ -7,15 +7,23 @@ interface EvidencePanelProps {
   selectedNodeId: string | null;
   nodes: HypothesisNodeDraft[];
   evidence: AgentEvidenceCard[];
+  focusedEvidenceIds?: string[];
 }
 
-export function EvidencePanel({ selectedNodeId, nodes, evidence }: EvidencePanelProps) {
+export function EvidencePanel({
+  selectedNodeId,
+  nodes,
+  evidence,
+  focusedEvidenceIds = []
+}: EvidencePanelProps) {
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [isReasoningOpen, setIsReasoningOpen] = useState(false);
   const node = nodes.find((item) => item.id === selectedNodeId) ?? null;
-  const selectedEvidence = node
-    ? evidence.filter((card) => card.nodeId === node.id)
-    : evidence;
+  const selectedEvidence = focusedEvidenceIds.length
+    ? evidence.filter((card) => focusedEvidenceIds.includes(card.id))
+    : node
+      ? evidence.filter((card) => card.nodeId === node.id)
+      : evidence;
   const nodeById = useMemo(
     () => new Map(nodes.map((item) => [item.id, item])),
     [nodes]
@@ -25,7 +33,9 @@ export function EvidencePanel({ selectedNodeId, nodes, evidence }: EvidencePanel
     <section className="evidence-panel" aria-label="Evidence cards">
       <div className="panel-heading">
         <p className="eyebrow">Evidence Cards</p>
-        <h2>{node ? node.label : "All Evidence"}</h2>
+        <h2>
+          {focusedEvidenceIds.length ? "Linked Evidence" : node ? node.label : "All Evidence"}
+        </h2>
       </div>
       {node ? (
         <button
@@ -50,7 +60,12 @@ export function EvidencePanel({ selectedNodeId, nodes, evidence }: EvidencePanel
         {selectedEvidence.map((card) => (
           <button
             aria-expanded={expandedCardId === card.id}
-            className={`evidence-card stack-card ${card.direction}`}
+            className={[
+              "evidence-card",
+              "stack-card",
+              card.direction,
+              focusedEvidenceIds.includes(card.id) ? "focused" : ""
+            ].join(" ")}
             key={card.id}
             onClick={() =>
               setExpandedCardId((current) => (current === card.id ? null : card.id))

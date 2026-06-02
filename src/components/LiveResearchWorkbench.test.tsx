@@ -98,6 +98,18 @@ const memo: MemoArtifact = {
       linkedNodeIds: ["node-1"],
       linkedEvidenceIds: ["ev-node-1"]
     }
+  ],
+  claims: [
+    {
+      id: "claim-driver-demand",
+      claimType: "driver",
+      text: "AI demand supports the valuation.",
+      linkedNodeIds: ["node-1"],
+      linkedEvidenceIds: ["ev-node-1"],
+      stance: "supports",
+      confidence: "Medium",
+      score: 0.2
+    }
   ]
 };
 
@@ -323,6 +335,26 @@ describe("LiveResearchWorkbench", () => {
     fireEvent.click(
       within(memoPanel).getByRole("button", { name: /Revenue Growth/ })
     );
+
+    const evidencePanel = screen.getByRole("region", { name: "Evidence cards" });
+    expect(within(evidencePanel).getByText("node-1 source")).toBeInTheDocument();
+  });
+
+  it("opens an audit trail from a memo claim and focuses linked evidence", async () => {
+    vi.stubGlobal("fetch", successfulFetch());
+
+    render(<LiveResearchWorkbench />);
+    runDefaultQuestion();
+
+    const claimButton = await screen.findByRole("button", {
+      name: /AI demand supports the valuation/i
+    });
+    fireEvent.click(claimButton);
+
+    const auditTrail = screen.getByRole("region", { name: "Audit trail" });
+    expect(auditTrail).toHaveTextContent("AI demand supports the valuation.");
+    expect(auditTrail).toHaveTextContent("Revenue Growth");
+    expect(auditTrail).toHaveTextContent("node-1 source");
 
     const evidencePanel = screen.getByRole("region", { name: "Evidence cards" });
     expect(within(evidencePanel).getByText("node-1 source")).toBeInTheDocument();
