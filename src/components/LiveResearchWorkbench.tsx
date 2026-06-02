@@ -44,6 +44,17 @@ interface SynthesisResponse {
 interface EvidenceQueueCallbacks {
   onProgress?: (completedCount: number) => void;
   onRetry?: (message: string) => void;
+  onTaskStart?: (index: number) => void;
+  onTaskComplete?: (index: number, evidenceCards: AgentEvidenceCard[]) => void;
+}
+
+interface EvidenceTaskView {
+  nodeId: string;
+  title: string;
+  prompt: string;
+  status: "queued" | "running" | "complete";
+  evidenceCards: AgentEvidenceCard[];
+  retryMessage?: string;
 }
 
 type DragState = {
@@ -194,6 +205,9 @@ export function LiveResearchWorkbench() {
   const [error, setError] = useState<string | null>(null);
   const [telemetryMetrics, setTelemetryMetrics] = useState<AgentTelemetryMetric[]>([]);
   const [workbenchStage, setWorkbenchStage] = useState<WorkbenchStage>("intro");
+  const [isTimelineExpanded, setIsTimelineExpanded] = useState(false);
+  const [evidenceTasks, setEvidenceTasks] = useState<EvidenceTaskView[]>([]);
+  const [expandedEvidenceTaskIndex, setExpandedEvidenceTaskIndex] = useState<number | null>(null);
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>({
     left: 320,
     right: 380
@@ -266,6 +280,9 @@ export function LiveResearchWorkbench() {
     setHighlightedNodeIds([]);
     setSelectedClaim(null);
     setFocusedEvidenceIds([]);
+    setIsTimelineExpanded(false);
+    setEvidenceTasks([]);
+    setExpandedEvidenceTaskIndex(null);
     setTelemetryMetrics([]);
     setPhases(initialPhases());
 
@@ -275,6 +292,17 @@ export function LiveResearchWorkbench() {
 
       updatePhase("Task Framing", "running", "Reading the question and framing the decision.");
       const plan = await postJson<PlanResponse>("/api/research/plan", cleanedRequest);
+      setEvidenceTasks(
+        plan.evidencePlan.items.map((item) => ({
+          nodeId: item.nodeId,
+          title:
+            plan.hypothesisTree.nodes.find((node) => node.id === item.nodeId)?.label ??
+            item.nodeId,
+          prompt: item.researchQuestions[0] ?? "Evidence research task",
+          status: "queued",
+          evidenceCards: []
+        }))
+      );
       let evidenceProgressVisible = false;
       let completedEvidenceCount = 0;
       let latestEvidenceMessage = "";
@@ -297,6 +325,29 @@ export function LiveResearchWorkbench() {
             if (evidenceProgressVisible) {
               updatePhase("Evidence Research", "running", message);
             }
+          },
+          onTaskStart: (index) => {
+            setEvidenceTasks((current) =>
+              current.map((task, taskIndex) =>
+                taskIndex === index ? { ...task, status: "running", retryMessage: undefined } : task
+              )
+            );
+            if (evidenceProgressVisible) {
+              const item = plan.evidencePlan.items[index];
+              const title =
+                plan.hypothesisTree.nodes.find((node) => node.id === item.nodeId)?.label ??
+                item.nodeId;
+              updatePhase("Evidence Research", "running", `Researching ${title}.`);
+            }
+          },
+          onTaskComplete: (index, evidenceCards) => {
+            setEvidenceTasks((current) =>
+              current.map((task, taskIndex) =>
+                taskIndex === index
+                  ? { ...task, status: "complete", evidenceCards, retryMessage: undefined }
+                  : task
+              )
+            );
           }
         }
       );
@@ -324,7 +375,7 @@ export function LiveResearchWorkbench() {
           ? latestEvidenceMessage
           : completedEvidenceCount > 0
           ? `${completedEvidenceCount}/${plan.evidencePlan.items.length} evidence tasks complete.`
-          : `Running ${plan.evidencePlan.items.length} evidence tasks with 2 concurrent workers.`
+          : `Researching ${plan.evidencePlan.items.length} evidence tasks with 2 concurrent workers.`
       );
       const evidenceCards = await evidencePromise;
       const evidenceArtifact: EvidenceCardsArtifact = {
@@ -378,6 +429,7 @@ export function LiveResearchWorkbench() {
 
     const tasks = evidencePlan.items.map((item, index) =>
       limit(async () => {
+        callbacks.onTaskStart?.(index);
         const result = await runEvidenceTaskUntilSuccess(
           request,
           item,
@@ -391,6 +443,7 @@ export function LiveResearchWorkbench() {
           type: "evidence-cards",
           evidenceCards: mergedCards
         });
+        callbacks.onTaskComplete?.(index, result.evidenceCards);
         callbacks.onProgress?.(completedCount);
         appendTelemetry(result.telemetry);
       })
@@ -410,6 +463,7 @@ export function LiveResearchWorkbench() {
 
     while (true) {
       try {
+        onRetry?.(`Researching task ${index + 1}: ${item.researchQuestions[0] ?? item.nodeId}.`);
         const result = await postJson<EvidenceTaskResponse>("/api/research/evidence", {
           request,
           item
@@ -499,10 +553,28 @@ export function LiveResearchWorkbench() {
               </div>
             ) : null}
             {workbenchStage === "complete" ? (
-              <CompletedRunSummary phases={phases} />
+              <CompletedRunSummary
+                isExpanded={isTimelineExpanded}
+                onToggle={() => setIsTimelineExpanded((current) => !current)}
+                phases={phases}
+              />
             ) : (
               <AgentRunTimeline phases={renderedPhases} />
             )}
+            {workbenchStage === "complete" && isTimelineExpanded ? (
+              <AgentRunTimeline phases={phases} />
+            ) : null}
+            {evidenceTasks.length > 0 ? (
+              <EvidenceTaskBoard
+                expandedIndex={expandedEvidenceTaskIndex}
+                onToggle={(index) =>
+                  setExpandedEvidenceTaskIndex((current) =>
+                    current === index ? null : index
+                  )
+                }
+                tasks={evidenceTasks}
+              />
+            ) : null}
             {telemetryMetrics.length > 0 && workbenchStage !== "complete" ? (
               <RunDiagnostics metrics={telemetryMetrics} />
             ) : null}
@@ -577,16 +649,92 @@ export function LiveResearchWorkbench() {
   );
 }
 
-function CompletedRunSummary({ phases }: { phases: AgentPhase[] }) {
+function CompletedRunSummary({
+  isExpanded,
+  onToggle,
+  phases
+}: {
+  isExpanded: boolean;
+  onToggle: () => void;
+  phases: AgentPhase[];
+}) {
   const completedCount = phases.filter((phase) => phase.status === "complete").length;
 
   return (
-    <section className="completed-summary" aria-label="Completed research summary">
+    <button
+      aria-expanded={isExpanded}
+      className="completed-summary compact-card-button"
+      onClick={onToggle}
+      type="button"
+    >
       <div>
         <h3>Deep Research complete</h3>
         <p>{completedCount}/7 steps complete</p>
       </div>
-      <span>Collapsed</span>
+      <span>{isExpanded ? "Collapse" : "Expand"}</span>
+    </button>
+  );
+}
+
+function EvidenceTaskBoard({
+  expandedIndex,
+  onToggle,
+  tasks
+}: {
+  expandedIndex: number | null;
+  onToggle: (index: number) => void;
+  tasks: EvidenceTaskView[];
+}) {
+  const completedCount = tasks.filter((task) => task.status === "complete").length;
+  const runningTasks = tasks.filter((task) => task.status === "running");
+
+  return (
+    <section className="evidence-task-board" aria-label="Evidence research tasks">
+      <div className="compact-section-heading">
+        <div>
+          <p className="eyebrow">Evidence Research</p>
+          <h3>{completedCount}/{tasks.length} evidence tasks complete</h3>
+        </div>
+        {runningTasks.length > 0 ? (
+          <span>Researching {runningTasks.map((task) => task.title).join(", ")}</span>
+        ) : null}
+      </div>
+      <div className="evidence-task-list">
+        {tasks.map((task, index) => (
+          <button
+            aria-expanded={expandedIndex === index}
+            className={`evidence-task-card stack-card ${task.status}`}
+            key={task.nodeId}
+            onClick={() => onToggle(index)}
+            type="button"
+          >
+            <div className="evidence-task-summary">
+              <strong>{task.title}</strong>
+              <span>{task.status}</span>
+            </div>
+            <small>{task.prompt}</small>
+            {expandedIndex === index ? (
+              <div className="stack-card-detail">
+                {task.evidenceCards.length > 0 ? (
+                  task.evidenceCards.map((card) => (
+                    <article className="task-evidence-detail" key={card.id}>
+                      <strong>{card.sourceTitle}</strong>
+                      <p>{card.extractedFact}</p>
+                      <blockquote>{card.quotedSnippet}</blockquote>
+                      <small>
+                        {card.sourceType} | {card.sourceDate} | {card.urlOrReference}
+                      </small>
+                      <small>{card.reasoningImpact}</small>
+                    </article>
+                  ))
+                ) : (
+                  <p>Still researching this evidence task.</p>
+                )}
+              </div>
+            ) : null}
+          </button>
+        ))}
+      </div>
     </section>
   );
 }

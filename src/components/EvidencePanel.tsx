@@ -1,7 +1,7 @@
 "use client";
 
 import type { AgentEvidenceCard, HypothesisNodeDraft } from "@/lib/agent/types";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 interface EvidencePanelProps {
   selectedNodeId: string | null;
@@ -16,6 +16,7 @@ export function EvidencePanel({
   evidence,
   focusedEvidenceIds = []
 }: EvidencePanelProps) {
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [isReasoningOpen, setIsReasoningOpen] = useState(false);
   const node = nodes.find((item) => item.id === selectedNodeId) ?? null;
@@ -29,14 +30,30 @@ export function EvidencePanel({
     [nodes]
   );
 
+  useEffect(() => {
+    if (focusedEvidenceIds.length > 0 || selectedNodeId) {
+      setIsPanelOpen(true);
+    }
+  }, [focusedEvidenceIds.length, selectedNodeId]);
+
   return (
     <section className="evidence-panel" aria-label="Evidence cards">
-      <div className="panel-heading">
-        <p className="eyebrow">Evidence Cards</p>
-        <h2>
-          {focusedEvidenceIds.length ? "Linked Evidence" : node ? node.label : "All Evidence"}
-        </h2>
-      </div>
+      <button
+        aria-expanded={isPanelOpen}
+        className="compact-panel-toggle"
+        onClick={() => setIsPanelOpen((current) => !current)}
+        type="button"
+      >
+        <div>
+          <p className="eyebrow">Evidence Cards</p>
+          <h2>
+            {focusedEvidenceIds.length ? "Linked Evidence" : node ? node.label : "All Evidence"}
+          </h2>
+        </div>
+        <strong>{selectedEvidence.length} cards</strong>
+      </button>
+      {isPanelOpen ? (
+        <>
       {node ? (
         <button
           aria-expanded={isReasoningOpen}
@@ -92,6 +109,8 @@ export function EvidencePanel({
           </button>
         ))}
       </div>
+        </>
+      ) : null}
     </section>
   );
 }

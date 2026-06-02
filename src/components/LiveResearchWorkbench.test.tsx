@@ -12,6 +12,7 @@ import type {
   EvidencePlanArtifact,
   HypothesisTreeArtifact,
   MemoArtifact,
+  ScoredNodesArtifact,
   TaskFrameArtifact
 } from "@/lib/agent/types";
 import { LiveResearchWorkbench } from "./LiveResearchWorkbench";
@@ -113,6 +114,26 @@ const memo: MemoArtifact = {
   ]
 };
 
+const scoredNodes: ScoredNodesArtifact = {
+  type: "scored-nodes",
+  nodes: hypothesisTree.nodes.map((node) => ({
+    id: node.id,
+    label: node.label,
+    claim: node.claim,
+    weight: node.weight,
+    stance: "supports",
+    confidence: "Medium",
+    weightedScore: 0.2,
+    reasoningNote: `${node.label} is supported.`,
+    whatWouldChange: `${node.label} weakens.`,
+    supportingEvidenceIds: [`ev-${node.id}`],
+    counterEvidenceIds: []
+  })),
+  finalScore: 0.5,
+  finalStance: "Partially Supported",
+  confidence: "Medium"
+};
+
 function evidenceForNode(nodeId: string): AgentEvidenceCard {
   return {
     id: `ev-${nodeId}`,
@@ -153,7 +174,7 @@ function successfulFetch() {
       return Response.json({ evidenceCards: [evidenceForNode(body.item.nodeId)] });
     }
     if (url.includes("/api/research/synthesis")) {
-      return Response.json({ memo });
+      return Response.json({ memo, scoredNodes });
     }
     throw new Error(`Unexpected fetch ${url}`);
   });
@@ -199,7 +220,7 @@ describe("LiveResearchWorkbench", () => {
         });
       }
       if (url.includes("/api/research/synthesis")) {
-        return Response.json({ memo });
+        return Response.json({ memo, scoredNodes });
       }
       throw new Error(`Unexpected fetch ${url}`);
     });
@@ -251,7 +272,7 @@ describe("LiveResearchWorkbench", () => {
         });
       }
       if (url.includes("/api/research/synthesis")) {
-        return Response.json({ memo });
+        return Response.json({ memo, scoredNodes });
       }
       throw new Error(`Unexpected fetch ${url}`);
     });
@@ -307,7 +328,7 @@ describe("LiveResearchWorkbench", () => {
         return Response.json({ evidenceCards: [evidenceForNode(body.item.nodeId)] });
       }
       if (url.includes("/api/research/synthesis")) {
-        return Response.json({ memo });
+        return Response.json({ memo, scoredNodes });
       }
       throw new Error(`Unexpected fetch ${url}`);
     });
@@ -338,6 +359,84 @@ describe("LiveResearchWorkbench", () => {
 
     const evidencePanel = screen.getByRole("region", { name: "Evidence cards" });
     expect(within(evidencePanel).getByText("node-1 source")).toBeInTheDocument();
+  });
+
+  it("shows active evidence research tasks and expands completed task evidence", async () => {
+    const evidenceResolvers: Array<(response: Response) => void> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/research/status")) {
+        return statusResponse();
+      }
+      if (url.includes("/api/research/plan")) {
+        return Response.json({ taskFrame, hypothesisTree, evidencePlan });
+      }
+      if (url.includes("/api/research/evidence")) {
+        const body = JSON.parse(String(init?.body)) as {
+          item: EvidencePlanArtifact["items"][number];
+        };
+        return new Promise<Response>((resolve) => {
+          evidenceResolvers.push((response) => resolve(response));
+          void body;
+        });
+      }
+      if (url.includes("/api/research/synthesis")) {
+        return Response.json({ memo, scoredNodes });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<LiveResearchWorkbench />);
+    runDefaultQuestion();
+
+    const taskBoard = await screen.findByRole("region", {
+      name: "Evidence research tasks"
+    });
+    await waitFor(() =>
+      expect(taskBoard).toHaveTextContent("Researching Revenue Growth, Margin Durability")
+    );
+
+    evidenceResolvers[0](
+      Response.json({ evidenceCards: [evidenceForNode(evidencePlan.items[0].nodeId)] })
+    );
+    await waitFor(() =>
+      expect(within(taskBoard).getByRole("button", { name: /Revenue Growth/ }))
+        .toHaveTextContent("complete")
+    );
+    fireEvent.click(within(taskBoard).getByRole("button", { name: /Revenue Growth/ }));
+    expect(taskBoard).toHaveTextContent("Evidence snippet.");
+
+    await waitFor(() => expect(evidenceResolvers).toHaveLength(3));
+    evidenceResolvers[1](
+      Response.json({ evidenceCards: [evidenceForNode(evidencePlan.items[1].nodeId)] })
+    );
+    evidenceResolvers[2](
+      Response.json({ evidenceCards: [evidenceForNode(evidencePlan.items[2].nodeId)] })
+    );
+    await waitFor(() => expect(evidenceResolvers).toHaveLength(5));
+    evidenceResolvers[3](
+      Response.json({ evidenceCards: [evidenceForNode(evidencePlan.items[3].nodeId)] })
+    );
+    evidenceResolvers[4](
+      Response.json({ evidenceCards: [evidenceForNode(evidencePlan.items[4].nodeId)] })
+    );
+  });
+
+  it("expands the completed seven-step timeline from the summary card", async () => {
+    vi.stubGlobal("fetch", successfulFetch());
+
+    render(<LiveResearchWorkbench />);
+    runDefaultQuestion();
+
+    const summary = await screen.findByRole("button", {
+      name: /Deep Research complete/
+    });
+    expect(summary).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(summary);
+
+    expect(summary).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Memo Rendering")).toBeInTheDocument();
   });
 
   it("opens an audit trail from a memo claim and focuses linked evidence", async () => {
