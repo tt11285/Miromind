@@ -1,19 +1,19 @@
 "use client";
 
-import pLimit from "p-limit";
 import type {
+  AgentArtifact,
+  AgentEvent,
   AgentEvidenceCard,
   AgentPhase,
   AgentRequest,
   AgentTelemetryMetric,
   EvidenceCardsArtifact,
-  EvidencePlanArtifact,
   HypothesisTreeArtifact,
   MemoArtifact,
   MemoClaim,
-  ScoredNodesArtifact,
-  TaskFrameArtifact
+  ScoredNodesArtifact
 } from "@/lib/agent/types";
+import { parseJsonLines } from "@/lib/agent/streamClient";
 import { useEffect, useState } from "react";
 import { AgentInputPanel } from "./AgentInputPanel";
 import { AgentRunTimeline } from "./AgentRunTimeline";
@@ -23,30 +23,6 @@ import { HypothesisTree } from "./HypothesisTree";
 import { InvestmentMemo } from "./InvestmentMemo";
 
 type WorkbenchStage = "intro" | "running" | "complete" | "error";
-
-interface PlanResponse {
-  taskFrame: TaskFrameArtifact;
-  hypothesisTree: HypothesisTreeArtifact;
-  evidencePlan: EvidencePlanArtifact;
-}
-
-interface EvidenceTaskResponse {
-  evidenceCards: AgentEvidenceCard[];
-  telemetry?: AgentTelemetryMetric[];
-}
-
-interface SynthesisResponse {
-  memo: MemoArtifact;
-  scoredNodes: ScoredNodesArtifact;
-  telemetry?: AgentTelemetryMetric[];
-}
-
-interface EvidenceQueueCallbacks {
-  onProgress?: (completedCount: number) => void;
-  onRetry?: (message: string) => void;
-  onTaskStart?: (index: number) => void;
-  onTaskComplete?: (index: number, evidenceCards: AgentEvidenceCard[]) => void;
-}
 
 interface EvidenceTaskView {
   nodeId: string;
@@ -171,24 +147,6 @@ async function extractErrorMessage(response: Response): Promise<string> {
   }
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-
-  if (!response.ok) {
-    throw new Error(await extractErrorMessage(response));
-  }
-
-  return response.json() as Promise<T>;
-}
-
 export function LiveResearchWorkbench() {
   const [modeLabel, setModeLabel] =
     useState<"Live Agent" | "Demo Fallback" | "Error">("Demo Fallback");
@@ -286,203 +244,115 @@ export function LiveResearchWorkbench() {
     setTelemetryMetrics([]);
     setPhases(initialPhases());
 
+    let latestTree: HypothesisTreeArtifact | null = null;
+    let runFailure: string | null = null;
+
+    function applyArtifact(artifact: AgentArtifact) {
+      switch (artifact.type) {
+        case "hypothesis-tree":
+          latestTree = artifact;
+          setTree(artifact);
+          setSelectedNodeId(null);
+          break;
+        case "evidence-plan":
+          setEvidenceTasks(
+            artifact.items.map((item) => ({
+              nodeId: item.nodeId,
+              title:
+                latestTree?.nodes.find((node) => node.id === item.nodeId)?.label ?? item.nodeId,
+              prompt: item.researchQuestions[0] ?? "Evidence research task",
+              status: "queued",
+              evidenceCards: []
+            }))
+          );
+          break;
+        case "evidence-cards":
+          setEvidence(artifact);
+          setEvidenceTasks((current) =>
+            current.map((task) => {
+              const cards = artifact.evidenceCards.filter((card) => card.nodeId === task.nodeId);
+              return cards.length > 0
+                ? { ...task, status: "complete", evidenceCards: cards }
+                : task;
+            })
+          );
+          break;
+        case "scored-nodes":
+          setScoredNodes(artifact);
+          break;
+        case "memo":
+          setMemo(artifact);
+          break;
+        default:
+          break;
+      }
+    }
+
     try {
       const cleanedRequest = sanitizeAgentRequest(request);
-      setModeLabel("Live Agent");
-
-      updatePhase("Task Framing", "running", "Reading the question and framing the decision.");
-      const plan = await postJson<PlanResponse>("/api/research/plan", cleanedRequest);
-      setEvidenceTasks(
-        plan.evidencePlan.items.map((item) => ({
-          nodeId: item.nodeId,
-          title:
-            plan.hypothesisTree.nodes.find((node) => node.id === item.nodeId)?.label ??
-            item.nodeId,
-          prompt: item.researchQuestions[0] ?? "Evidence research task",
-          status: "queued",
-          evidenceCards: []
-        }))
-      );
-      let evidenceProgressVisible = false;
-      let completedEvidenceCount = 0;
-      let latestEvidenceMessage = "";
-      const evidencePromise = runEvidenceQueue(
-        cleanedRequest,
-        plan.evidencePlan,
-        {
-          onProgress: (completedCount) => {
-          completedEvidenceCount = completedCount;
-          if (evidenceProgressVisible) {
-            updatePhase(
-              "Evidence Research",
-              "running",
-              `${completedCount}/${plan.evidencePlan.items.length} evidence tasks complete.`
-            );
-          }
-          },
-          onRetry: (message) => {
-            latestEvidenceMessage = message;
-            if (evidenceProgressVisible) {
-              updatePhase("Evidence Research", "running", message);
-            }
-          },
-          onTaskStart: (index) => {
-            setEvidenceTasks((current) =>
-              current.map((task, taskIndex) =>
-                taskIndex === index ? { ...task, status: "running", retryMessage: undefined } : task
-              )
-            );
-            if (evidenceProgressVisible) {
-              const item = plan.evidencePlan.items[index];
-              const title =
-                plan.hypothesisTree.nodes.find((node) => node.id === item.nodeId)?.label ??
-                item.nodeId;
-              updatePhase("Evidence Research", "running", `Researching ${title}.`);
-            }
-          },
-          onTaskComplete: (index, evidenceCards) => {
-            setEvidenceTasks((current) =>
-              current.map((task, taskIndex) =>
-                taskIndex === index
-                  ? { ...task, status: "complete", evidenceCards, retryMessage: undefined }
-                  : task
-              )
-            );
-          }
-        }
-      );
-
-      updatePhase("Task Framing", "complete", "Research task framed.");
-      await delay(120);
-
-      updatePhase("Hypothesis Generation", "running", "Building the hypothesis tree.");
-      setTree(plan.hypothesisTree);
-      setSelectedNodeId(null);
-      await delay(180);
-      updatePhase("Hypothesis Generation", "complete", "Hypothesis tree generated.");
-      await delay(90);
-
-      updatePhase("Evidence Planning", "running", "Planning source checks.");
-      await delay(140);
-      updatePhase("Evidence Planning", "complete", "Evidence plan generated.");
-      await delay(80);
-
-      evidenceProgressVisible = true;
-      updatePhase(
-        "Evidence Research",
-        "running",
-        latestEvidenceMessage
-          ? latestEvidenceMessage
-          : completedEvidenceCount > 0
-          ? `${completedEvidenceCount}/${plan.evidencePlan.items.length} evidence tasks complete.`
-          : `Researching ${plan.evidencePlan.items.length} evidence tasks with 2 concurrent workers.`
-      );
-      const evidenceCards = await evidencePromise;
-      const evidenceArtifact: EvidenceCardsArtifact = {
-        type: "evidence-cards",
-        evidenceCards
-      };
-      setEvidence(evidenceArtifact);
-      updatePhase(
-        "Evidence Research",
-        "complete",
-        `All ${plan.evidencePlan.items.length} evidence tasks returned successfully.`
-      );
-
-      updatePhase("Evidence Scoring", "running", "Scoring evidence and node conclusions.");
-      const synthesis = await postJson<SynthesisResponse>("/api/research/synthesis", {
-        request: cleanedRequest,
-        taskFrame: plan.taskFrame,
-        hypothesisTree: plan.hypothesisTree,
-        evidenceCards
+      const response = await fetch("/api/research/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cleanedRequest)
       });
-      appendTelemetry(synthesis.telemetry);
-      setScoredNodes(synthesis.scoredNodes);
-      updatePhase("Evidence Scoring", "complete", "Evidence scored.");
 
-      updatePhase("Reasoning Synthesis", "running", "Synthesizing the investment memo.");
-      setMemo(synthesis.memo);
-      updatePhase("Reasoning Synthesis", "complete", "Memo synthesized.");
+      if (!response.ok || !response.body) {
+        throw new Error(await extractErrorMessage(response));
+      }
 
-      updatePhase("Memo Rendering", "running", "Rendering the final memo.");
-      updatePhase("Memo Rendering", "complete", "Final memo ready.");
-      setWorkbenchStage("complete");
+      for await (const event of parseJsonLines<AgentEvent>(response.body)) {
+        switch (event.type) {
+          case "run-started":
+            setModeLabel(event.mode === "demo-fallback" ? "Demo Fallback" : "Live Agent");
+            break;
+          case "phase-started":
+            updatePhase(event.phase, "running", event.detail);
+            if (event.phase === "Evidence Research") {
+              setEvidenceTasks((current) =>
+                current.map((task) =>
+                  task.status === "queued" ? { ...task, status: "running" } : task
+                )
+              );
+            }
+            break;
+          case "phase-completed":
+            updatePhase(event.phase, "complete", event.detail);
+            if (event.phase === "Evidence Research") {
+              setEvidenceTasks((current) =>
+                current.map((task) =>
+                  task.status === "complete" ? task : { ...task, status: "complete" }
+                )
+              );
+            }
+            break;
+          case "phase-failed":
+            updatePhase(event.phase, "failed", event.error);
+            break;
+          case "telemetry":
+            appendTelemetry([event.metric]);
+            break;
+          case "artifact":
+            applyArtifact(event.artifact);
+            break;
+          case "run-failed":
+            runFailure = event.error;
+            break;
+          case "run-completed":
+          default:
+            break;
+        }
+      }
     } catch (runError) {
-      handleRunFailure(
-        runError instanceof Error ? runError.message : "Research run failed."
-      );
+      runFailure = runError instanceof Error ? runError.message : "Research run failed.";
     } finally {
       setIsRunning(false);
     }
-  }
 
-  async function runEvidenceQueue(
-    request: AgentRequest,
-    evidencePlan: EvidencePlanArtifact,
-    callbacks: EvidenceQueueCallbacks = {}
-  ): Promise<AgentEvidenceCard[]> {
-    const limit = pLimit(2);
-    const completedGroups: AgentEvidenceCard[][] = Array.from({
-      length: evidencePlan.items.length
-    });
-    let completedCount = 0;
-
-    const tasks = evidencePlan.items.map((item, index) =>
-      limit(async () => {
-        callbacks.onTaskStart?.(index);
-        const result = await runEvidenceTaskUntilSuccess(
-          request,
-          item,
-          index,
-          callbacks.onRetry
-        );
-        completedGroups[index] = result.evidenceCards;
-        completedCount += 1;
-        const mergedCards = completedGroups.flatMap((group) => group ?? []);
-        setEvidence({
-          type: "evidence-cards",
-          evidenceCards: mergedCards
-        });
-        callbacks.onTaskComplete?.(index, result.evidenceCards);
-        callbacks.onProgress?.(completedCount);
-        appendTelemetry(result.telemetry);
-      })
-    );
-
-    await Promise.all(tasks);
-    return completedGroups.flatMap((group) => group ?? []);
-  }
-
-  async function runEvidenceTaskUntilSuccess(
-    request: AgentRequest,
-    item: EvidencePlanArtifact["items"][number],
-    index: number,
-    onRetry?: (message: string) => void
-  ): Promise<EvidenceTaskResponse> {
-    let attempt = 1;
-
-    while (true) {
-      try {
-        onRetry?.(`Researching task ${index + 1}: ${item.researchQuestions[0] ?? item.nodeId}.`);
-        const result = await postJson<EvidenceTaskResponse>("/api/research/evidence", {
-          request,
-          item
-        });
-        if (result.evidenceCards.length === 0) {
-          throw new Error("Evidence task returned no evidence cards.");
-        }
-        return result;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Evidence task failed.";
-        console.warn(
-          `Evidence task ${index + 1} failed on attempt ${attempt}; retrying in 5 seconds.`,
-          error
-        );
-        onRetry?.(`Task ${index + 1} attempt ${attempt} failed: ${message}. Retrying in 5 seconds.`);
-        attempt += 1;
-        await delay(5000);
-      }
+    if (runFailure) {
+      handleRunFailure(runFailure);
+      return;
     }
+    setWorkbenchStage("complete");
   }
 
   function appendTelemetry(metrics: AgentTelemetryMetric[] | undefined) {

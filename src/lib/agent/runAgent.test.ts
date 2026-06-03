@@ -35,7 +35,8 @@ describe("runAgent", () => {
     expect(events.filter((event) => event.type === "phase-started")).toHaveLength(7);
     expect(events.some((event) => event.type === "artifact")).toBe(true);
     expect(events.at(-1)?.type).toBe("run-completed");
-    expect(stageClient.calls).toHaveLength(6);
+    // Task Framing + Hypothesis Generation + 5 evidence items + Reasoning Synthesis
+    expect(stageClient.calls).toHaveLength(8);
   });
 
   it("emits a run-completed event that satisfies the agent event schema", async () => {
@@ -255,6 +256,32 @@ function createStageClient() {
       schema: { parse(value: unknown): T }
     ): Promise<T> {
       calls.push(stageName);
+      if (stageName === "Task Framing") {
+        return schema.parse({
+          securityName: "NVIDIA Corporation",
+          ticker: "NVDA",
+          sectorFrame: "AI accelerators and data center platforms",
+          rootQuestion: request.question,
+          researchObjective: "Assess whether AI growth supports the valuation.",
+          decisionCriteria: ["Revenue durability"],
+          evidenceCategories: ["Earnings"],
+          safetyNote: "Research assistance only."
+        });
+      }
+
+      if (stageName === "Hypothesis Generation") {
+        return schema.parse({
+          rootQuestion: request.question,
+          nodes: [
+            createNode("demand", "Demand Sustainability"),
+            createNode("margin", "Margin Durability"),
+            createNode("moat", "Competitive Moat"),
+            createNode("valuation", "Valuation Sensitivity"),
+            createNode("execution", "Execution Risk")
+          ]
+        });
+      }
+
       if (stageName === "Evidence Research") {
         const nodeId = prompt.match(/"nodeId":"([^"]+)"/)?.[1] ?? "unknown";
         return schema.parse({

@@ -2,8 +2,8 @@ import { evidenceResearchOutputSchema } from "./schemas";
 import { scoreAgentEvidence } from "./scoring";
 import {
   createLocalEvidencePlan,
-  createLocalHypothesisTree,
-  createLocalTaskFrame,
+  frameTaskWithFallback,
+  generateHypothesisTreeWithFallback,
   synthesizeMemoWithFallback,
   type StageClient
 } from "./localResearch";
@@ -61,7 +61,10 @@ export async function* runAgent(
 
   let phaseStartedAt = now();
   yield* phaseStarted(phases, "Task Framing", "Framing the selected security and research question.");
-  const taskFrame = createLocalTaskFrame(request);
+  const taskFrame = await frameTaskWithFallback({
+    stageClient: options.stageClient,
+    request
+  });
   artifacts.push(taskFrame);
   yield { type: "artifact", artifact: taskFrame };
   yield* phaseCompleted(phases, "Task Framing", "Research task framed.");
@@ -69,7 +72,11 @@ export async function* runAgent(
 
   phaseStartedAt = now();
   yield* phaseStarted(phases, "Hypothesis Generation", "Generating a hypothesis tree.");
-  const hypothesisTree = createLocalHypothesisTree(taskFrame, request);
+  const hypothesisTree = await generateHypothesisTreeWithFallback({
+    stageClient: options.stageClient,
+    frame: taskFrame,
+    request
+  });
   artifacts.push(hypothesisTree);
   yield { type: "artifact", artifact: hypothesisTree };
   yield* phaseCompleted(phases, "Hypothesis Generation", "Hypothesis tree generated.");

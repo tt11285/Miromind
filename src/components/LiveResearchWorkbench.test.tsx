@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -150,6 +151,89 @@ function evidenceForNode(nodeId: string): AgentEvidenceCard {
   };
 }
 
+const allEvidenceCards = hypothesisTree.nodes.map((node) => evidenceForNode(node.id));
+
+function phaseStarted(phase: string) {
+  return { type: "phase-started", phase, detail: `${phase} running.` };
+}
+
+function phaseCompleted(phase: string) {
+  return { type: "phase-completed", phase, detail: `${phase} complete.` };
+}
+
+/** The ordered event stream that a successful live run emits. */
+function fullRunEvents(): unknown[] {
+  return [
+    { type: "run-started", runId: "run-test", mode: "live-agent" },
+    phaseStarted("Task Framing"),
+    { type: "artifact", artifact: taskFrame },
+    phaseCompleted("Task Framing"),
+    phaseStarted("Hypothesis Generation"),
+    { type: "artifact", artifact: hypothesisTree },
+    phaseCompleted("Hypothesis Generation"),
+    phaseStarted("Evidence Planning"),
+    { type: "artifact", artifact: evidencePlan },
+    phaseCompleted("Evidence Planning"),
+    phaseStarted("Evidence Research"),
+    { type: "artifact", artifact: { type: "evidence-cards", evidenceCards: allEvidenceCards } },
+    phaseCompleted("Evidence Research"),
+    phaseStarted("Evidence Scoring"),
+    { type: "artifact", artifact: scoredNodes },
+    phaseCompleted("Evidence Scoring"),
+    phaseStarted("Reasoning Synthesis"),
+    { type: "artifact", artifact: memo },
+    phaseCompleted("Reasoning Synthesis"),
+    phaseStarted("Memo Rendering"),
+    phaseCompleted("Memo Rendering"),
+    { type: "run-completed", run: { mode: "live-agent" } }
+  ];
+}
+
+function streamResponse(lines: unknown[]): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const line of lines) {
+        controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+      }
+      controller.close();
+    }
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: { "Content-Type": "application/x-ndjson; charset=utf-8" }
+  });
+}
+
+function controlledRun() {
+  const encoder = new TextEncoder();
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const stream = new ReadableStream<Uint8Array>({
+    start(streamController) {
+      controller = streamController;
+    }
+  });
+  const response = new Response(stream, {
+    status: 200,
+    headers: { "Content-Type": "application/x-ndjson; charset=utf-8" }
+  });
+  return {
+    response,
+    async push(...lines: unknown[]) {
+      await act(async () => {
+        for (const line of lines) {
+          controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+        }
+      });
+    },
+    async close() {
+      await act(async () => {
+        controller.close();
+      });
+    }
+  };
+}
+
 function statusResponse() {
   return Response.json({
     liveAvailable: true,
@@ -158,23 +242,14 @@ function statusResponse() {
   });
 }
 
-function successfulFetch() {
-  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+function successfulRunFetch() {
+  return vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input);
     if (url.includes("/api/research/status")) {
       return statusResponse();
     }
-    if (url.includes("/api/research/plan")) {
-      return Response.json({ taskFrame, hypothesisTree, evidencePlan });
-    }
-    if (url.includes("/api/research/evidence")) {
-      const body = JSON.parse(String(init?.body)) as {
-        item: EvidencePlanArtifact["items"][number];
-      };
-      return Response.json({ evidenceCards: [evidenceForNode(body.item.nodeId)] });
-    }
-    if (url.includes("/api/research/synthesis")) {
-      return Response.json({ memo, scoredNodes });
+    if (url.includes("/api/research/run")) {
+      return streamResponse(fullRunEvents());
     }
     throw new Error(`Unexpected fetch ${url}`);
   });
@@ -191,36 +266,15 @@ function runDefaultQuestion() {
 }
 
 describe("LiveResearchWorkbench", () => {
-  it("launches with motion state and reveals timeline steps progressively", async () => {
-    let resolvePlan: (response: Response) => void = () => {};
-    let holdEvidence = true;
-    const evidenceResolvers: Array<() => void> = [];
-    const planPromise = new Promise<Response>((resolve) => {
-      resolvePlan = resolve;
-    });
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  it("reveals timeline steps progressively as the run streams", async () => {
+    const run = controlledRun();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/api/research/status")) {
         return statusResponse();
       }
-      if (url.includes("/api/research/plan")) {
-        return planPromise;
-      }
-      if (url.includes("/api/research/evidence")) {
-        const body = JSON.parse(String(init?.body)) as {
-          item: EvidencePlanArtifact["items"][number];
-        };
-        if (!holdEvidence) {
-          return Response.json({ evidenceCards: [evidenceForNode(body.item.nodeId)] });
-        }
-        return new Promise<Response>((resolve) => {
-          evidenceResolvers.push(() => {
-            resolve(Response.json({ evidenceCards: [evidenceForNode(body.item.nodeId)] }));
-          });
-        });
-      }
-      if (url.includes("/api/research/synthesis")) {
-        return Response.json({ memo, scoredNodes });
+      if (url.includes("/api/research/run")) {
+        return run.response;
       }
       throw new Error(`Unexpected fetch ${url}`);
     });
@@ -230,158 +284,59 @@ describe("LiveResearchWorkbench", () => {
     runDefaultQuestion();
 
     expect(screen.getByRole("button", { name: "Running Research" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Running Research" })).not.toHaveClass("launching");
     expect(screen.getByRole("main")).toHaveClass("running-active");
+
+    await run.push(
+      { type: "run-started", runId: "run-test", mode: "live-agent" },
+      phaseStarted("Task Framing")
+    );
+
     expect(await screen.findByText("Task Framing")).toBeInTheDocument();
     expect(screen.queryByText("Hypothesis Generation")).not.toBeInTheDocument();
     expect(screen.getByText("Thinking")).toBeInTheDocument();
 
-    resolvePlan(Response.json({ taskFrame, hypothesisTree, evidencePlan }));
-
+    // Advance through Task Framing into Hypothesis Generation, but do not finish.
+    for (const event of fullRunEvents().slice(2, 5)) {
+      await run.push(event);
+    }
     expect(await screen.findByText("Hypothesis Generation")).toBeInTheDocument();
-    expect(await screen.findByText("Evidence Research")).toBeInTheDocument();
-    holdEvidence = false;
-    evidenceResolvers.splice(0).forEach((resolve) => resolve());
-    expect(await screen.findByText("Deep Research complete", {}, { timeout: 3000 })).toBeInTheDocument();
+
+    // Stream the remainder and close; the timeline collapses into the summary.
+    for (const event of fullRunEvents().slice(5)) {
+      await run.push(event);
+    }
+    await run.close();
+
+    expect(
+      await screen.findByText("Deep Research complete", {}, { timeout: 3000 })
+    ).toBeInTheDocument();
   });
 
-  it("runs evidence tasks as separate requests with frontend concurrency capped at 2", async () => {
-    let activeEvidenceRequests = 0;
-    let maxActiveEvidenceRequests = 0;
-    const evidenceResolvers: Array<(response: Response) => void> = [];
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.includes("/api/research/status")) {
-        return statusResponse();
-      }
-      if (url.includes("/api/research/plan")) {
-        return Response.json({ taskFrame, hypothesisTree, evidencePlan });
-      }
-      if (url.includes("/api/research/evidence")) {
-        activeEvidenceRequests += 1;
-        maxActiveEvidenceRequests = Math.max(maxActiveEvidenceRequests, activeEvidenceRequests);
-        const body = JSON.parse(String(init?.body)) as {
-          item: EvidencePlanArtifact["items"][number];
-        };
-        return new Promise<Response>((resolve) => {
-          evidenceResolvers.push((response) => {
-            activeEvidenceRequests -= 1;
-            resolve(response);
-          });
-          void body;
-        });
-      }
-      if (url.includes("/api/research/synthesis")) {
-        return Response.json({ memo, scoredNodes });
-      }
-      throw new Error(`Unexpected fetch ${url}`);
-    });
-    vi.stubGlobal("fetch", fetchMock);
+  it("runs the streamed agent workflow and links memo trace to evidence", async () => {
+    vi.stubGlobal("fetch", successfulRunFetch());
 
     render(<LiveResearchWorkbench />);
     runDefaultQuestion();
 
-    await waitFor(() => expect(evidenceResolvers).toHaveLength(2));
-    expect(maxActiveEvidenceRequests).toBe(2);
-
-    evidenceResolvers.splice(0, 2).forEach((resolve, index) => {
-      resolve(Response.json({ evidenceCards: [evidenceForNode(evidencePlan.items[index].nodeId)] }));
-    });
-    await waitFor(() => expect(evidenceResolvers).toHaveLength(2));
-    expect(maxActiveEvidenceRequests).toBe(2);
-
-    evidenceResolvers.splice(0, 2).forEach((resolve, index) => {
-      resolve(Response.json({ evidenceCards: [evidenceForNode(evidencePlan.items[index + 2].nodeId)] }));
-    });
-    await waitFor(() => expect(evidenceResolvers).toHaveLength(1));
-    expect(maxActiveEvidenceRequests).toBe(2);
-
-    evidenceResolvers.splice(0, 1).forEach((resolve) => {
-      resolve(Response.json({ evidenceCards: [evidenceForNode(evidencePlan.items[4].nodeId)] }));
-    });
-
-    expect(await screen.findByText("Deep Research complete", {}, { timeout: 3000 })).toBeInTheDocument();
-    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes("/api/research/evidence"))).toHaveLength(5);
-    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/research/run"))).toBe(false);
-  });
-
-  it("retries a failed evidence task after a 5 second delay before synthesis", async () => {
-    let firstNodeAttempts = 0;
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.includes("/api/research/status")) {
-        return statusResponse();
-      }
-      if (url.includes("/api/research/plan")) {
-        return Response.json({ taskFrame, hypothesisTree, evidencePlan });
-      }
-      if (url.includes("/api/research/evidence")) {
-        const body = JSON.parse(String(init?.body)) as {
-          item: EvidencePlanArtifact["items"][number];
-        };
-        if (body.item.nodeId === "node-1") {
-          firstNodeAttempts += 1;
-          if (firstNodeAttempts === 1) {
-            return Response.json({ error: "Temporary evidence failure." }, { status: 502 });
-          }
-        }
-        return Response.json({ evidenceCards: [evidenceForNode(body.item.nodeId)] });
-      }
-      if (url.includes("/api/research/synthesis")) {
-        return Response.json({ memo, scoredNodes });
-      }
-      throw new Error(`Unexpected fetch ${url}`);
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(<LiveResearchWorkbench />);
-    runDefaultQuestion();
-
-    await waitFor(() => expect(firstNodeAttempts).toBe(1));
-    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/research/synthesis"))).toBe(false);
-
-    await waitFor(() => expect(firstNodeAttempts).toBe(2), { timeout: 7000 });
-    expect(await screen.findByText("Deep Research complete", {}, { timeout: 3000 })).toBeInTheDocument();
-    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/research/synthesis"))).toBe(true);
-  }, 8000);
-
-  it("runs the agent workflow and links memo trace to evidence", async () => {
-    vi.stubGlobal("fetch", successfulFetch());
-
-    render(<LiveResearchWorkbench />);
-    runDefaultQuestion();
-
-    expect(await screen.findByText("Partially Supported", {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(
+      await screen.findByText("Partially Supported", {}, { timeout: 3000 })
+    ).toBeInTheDocument();
     const memoPanel = screen.getByRole("region", { name: "Investment memo" });
-    fireEvent.click(
-      within(memoPanel).getByRole("button", { name: /Revenue Growth/ })
-    );
+    fireEvent.click(within(memoPanel).getByRole("button", { name: /Revenue Growth/ }));
 
     const evidencePanel = screen.getByRole("region", { name: "Evidence cards" });
     expect(within(evidencePanel).getByText("node-1 source")).toBeInTheDocument();
   });
 
-  it("shows active evidence research tasks and expands completed task evidence", async () => {
-    const evidenceResolvers: Array<(response: Response) => void> = [];
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  it("marks evidence research tasks complete as evidence cards stream in", async () => {
+    const run = controlledRun();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/api/research/status")) {
         return statusResponse();
       }
-      if (url.includes("/api/research/plan")) {
-        return Response.json({ taskFrame, hypothesisTree, evidencePlan });
-      }
-      if (url.includes("/api/research/evidence")) {
-        const body = JSON.parse(String(init?.body)) as {
-          item: EvidencePlanArtifact["items"][number];
-        };
-        return new Promise<Response>((resolve) => {
-          evidenceResolvers.push((response) => resolve(response));
-          void body;
-        });
-      }
-      if (url.includes("/api/research/synthesis")) {
-        return Response.json({ memo, scoredNodes });
+      if (url.includes("/api/research/run")) {
+        return run.response;
       }
       throw new Error(`Unexpected fetch ${url}`);
     });
@@ -389,6 +344,20 @@ describe("LiveResearchWorkbench", () => {
 
     render(<LiveResearchWorkbench />);
     runDefaultQuestion();
+
+    await run.push(
+      { type: "run-started", runId: "run-test", mode: "live-agent" },
+      phaseStarted("Task Framing"),
+      { type: "artifact", artifact: taskFrame },
+      phaseCompleted("Task Framing"),
+      phaseStarted("Hypothesis Generation"),
+      { type: "artifact", artifact: hypothesisTree },
+      phaseCompleted("Hypothesis Generation"),
+      phaseStarted("Evidence Planning"),
+      { type: "artifact", artifact: evidencePlan },
+      phaseCompleted("Evidence Planning"),
+      phaseStarted("Evidence Research")
+    );
 
     const taskBoard = await screen.findByRole("region", {
       name: "Evidence research tasks"
@@ -397,34 +366,28 @@ describe("LiveResearchWorkbench", () => {
       expect(taskBoard).toHaveTextContent("Researching Revenue Growth, Margin Durability")
     );
 
-    evidenceResolvers[0](
-      Response.json({ evidenceCards: [evidenceForNode(evidencePlan.items[0].nodeId)] })
-    );
+    await run.push({
+      type: "artifact",
+      artifact: { type: "evidence-cards", evidenceCards: [evidenceForNode("node-1")] }
+    });
+
     await waitFor(() =>
-      expect(within(taskBoard).getByRole("button", { name: /Revenue Growth/ }))
-        .toHaveTextContent("complete")
+      expect(within(taskBoard).getByRole("button", { name: /Revenue Growth/ })).toHaveTextContent(
+        "complete"
+      )
     );
     fireEvent.click(within(taskBoard).getByRole("button", { name: /Revenue Growth/ }));
     expect(taskBoard).toHaveTextContent("Evidence snippet.");
 
-    await waitFor(() => expect(evidenceResolvers).toHaveLength(3));
-    evidenceResolvers[1](
-      Response.json({ evidenceCards: [evidenceForNode(evidencePlan.items[1].nodeId)] })
+    await run.push(
+      { type: "artifact", artifact: { type: "evidence-cards", evidenceCards: allEvidenceCards } },
+      phaseCompleted("Evidence Research")
     );
-    evidenceResolvers[2](
-      Response.json({ evidenceCards: [evidenceForNode(evidencePlan.items[2].nodeId)] })
-    );
-    await waitFor(() => expect(evidenceResolvers).toHaveLength(5));
-    evidenceResolvers[3](
-      Response.json({ evidenceCards: [evidenceForNode(evidencePlan.items[3].nodeId)] })
-    );
-    evidenceResolvers[4](
-      Response.json({ evidenceCards: [evidenceForNode(evidencePlan.items[4].nodeId)] })
-    );
+    await run.close();
   });
 
   it("expands the completed seven-step timeline from the summary card", async () => {
-    vi.stubGlobal("fetch", successfulFetch());
+    vi.stubGlobal("fetch", successfulRunFetch());
 
     render(<LiveResearchWorkbench />);
     runDefaultQuestion();
@@ -440,7 +403,7 @@ describe("LiveResearchWorkbench", () => {
   });
 
   it("opens an audit trail from a memo claim and focuses linked evidence", async () => {
-    vi.stubGlobal("fetch", successfulFetch());
+    vi.stubGlobal("fetch", successfulRunFetch());
 
     render(<LiveResearchWorkbench />);
     runDefaultQuestion();
@@ -459,13 +422,13 @@ describe("LiveResearchWorkbench", () => {
     expect(within(evidencePanel).getByText("node-1 source")).toBeInTheDocument();
   });
 
-  it("shows a server error instead of silently ignoring a failed plan response", async () => {
+  it("shows a server error when the run request is rejected", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/api/research/status")) {
         return statusResponse();
       }
-      if (url.includes("/api/research/plan")) {
+      if (url.includes("/api/research/run")) {
         return Response.json({ error: "Invalid research request." }, { status: 400 });
       }
       throw new Error(`Unexpected fetch ${url}`);
@@ -475,14 +438,39 @@ describe("LiveResearchWorkbench", () => {
     render(<LiveResearchWorkbench />);
     runDefaultQuestion();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Invalid research request."
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("Invalid research request.");
+    await waitFor(() => expect(screen.getAllByText("failed")).toHaveLength(7));
+  });
+
+  it("surfaces a streamed run-failed event as an error", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/research/status")) {
+        return statusResponse();
+      }
+      if (url.includes("/api/research/run")) {
+        return streamResponse([
+          { type: "run-started", runId: "run-test", mode: "live-agent" },
+          {
+            type: "run-failed",
+            error: "A MiroMind API key is required for this non-curated research task.",
+            fallbackAvailable: false
+          }
+        ]);
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<LiveResearchWorkbench />);
+    runDefaultQuestion();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("MiroMind API key is required");
     await waitFor(() => expect(screen.getAllByText("failed")).toHaveLength(7));
   });
 
   it("removes UI-only security fields before sending the research request", async () => {
-    const fetchMock = successfulFetch();
+    const fetchMock = successfulRunFetch();
     vi.stubGlobal("fetch", fetchMock);
 
     render(<LiveResearchWorkbench />);
@@ -490,15 +478,13 @@ describe("LiveResearchWorkbench", () => {
 
     await waitFor(() =>
       expect(
-        fetchMock.mock.calls.some(([input]) =>
-          String(input).includes("/api/research/plan")
-        )
+        fetchMock.mock.calls.some(([input]) => String(input).includes("/api/research/run"))
       ).toBe(true)
     );
-    const planCall = fetchMock.mock.calls.find(([input]) =>
-      String(input).includes("/api/research/plan")
+    const runCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).includes("/api/research/run")
     );
-    const init = planCall?.[1] as RequestInit;
+    const init = runCall?.[1] as RequestInit;
     const body = JSON.parse(String(init.body));
 
     expect(body.security).toEqual(selectedRequest.security);
