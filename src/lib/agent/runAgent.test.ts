@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { agentEventSchema } from "./schemas";
 import { runAgent } from "./runAgent";
-import type { AgentRequest } from "./types";
+import type { AgentEvidenceCard, AgentRequest } from "./types";
 
 const request: AgentRequest = {
   security: {
@@ -179,6 +179,38 @@ describe("runAgent", () => {
           : 0
       )
     ).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("applies injected evidence verification before scoring", async () => {
+    const stageClient = createStageClient();
+    const verifyEvidence = vi.fn(async (cards: AgentEvidenceCard[]) =>
+      cards.map((card) => ({ ...card, provenanceStatus: "verified" as const }))
+    );
+
+    const events = [];
+    for await (const event of runAgent(request, {
+      stageClient,
+      runId: "run-verified",
+      verifyEvidence
+    })) {
+      events.push(event);
+    }
+
+    expect(verifyEvidence).toHaveBeenCalledTimes(1);
+    const completed = events.at(-1);
+    if (completed?.type !== "run-completed") {
+      throw new Error("Expected a completed run.");
+    }
+    expect(
+      completed.run.evidenceCards?.every((card) => card.provenanceStatus === "verified")
+    ).toBe(true);
+    const evidenceResearchCompleted = events.find(
+      (event) => event.type === "phase-completed" && event.phase === "Evidence Research"
+    );
+    expect(
+      evidenceResearchCompleted?.type === "phase-completed" &&
+        evidenceResearchCompleted.detail
+    ).toContain("verified source links");
   });
 
   it("completes the run with unavailable evidence and fallback memo when live research calls fail", async () => {

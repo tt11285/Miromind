@@ -1,3 +1,4 @@
+import { verifyEvidenceCards } from "@/lib/agent/evidenceVerification";
 import { createFallbackRun, isCuratedFallbackEligible } from "@/lib/agent/fallback";
 import { createMiroMindStageClient } from "@/lib/agent/miromindClient";
 import { runAgent } from "@/lib/agent/runAgent";
@@ -72,7 +73,15 @@ export async function POST(request: Request): Promise<Response> {
             controller.enqueue(encodeEvent({ type: "telemetry", metric }));
           }
         });
-        for await (const event of runAgent(agentRequest, { stageClient, runId })) {
+        const verifyTimeoutMs = process.env.SOURCE_VERIFY_TIMEOUT_MS
+          ? Number(process.env.SOURCE_VERIFY_TIMEOUT_MS)
+          : 5000;
+        for await (const event of runAgent(agentRequest, {
+          stageClient,
+          runId,
+          verifyEvidence: (cards) =>
+            verifyEvidenceCards(cards, { timeoutMs: verifyTimeoutMs })
+        })) {
           controller.enqueue(encodeEvent(event));
         }
         controller.close();

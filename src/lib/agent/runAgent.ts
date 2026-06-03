@@ -31,6 +31,11 @@ interface RunAgentOptions {
   stageClient: StageClient;
   runId: string;
   now?: () => number;
+  /**
+   * Optional source-link verification applied to gathered evidence before
+   * scoring. Injected by the route so unit tests stay network-free.
+   */
+  verifyEvidence?: (cards: AgentEvidenceCard[]) => Promise<AgentEvidenceCard[]>;
 }
 
 const phaseNames: AgentPhaseName[] = [
@@ -115,11 +120,19 @@ export async function* runAgent(
     };
     yield { type: "artifact", artifact: evidenceArtifact };
   }
+  if (options.verifyEvidence) {
+    const verifiedCards = await options.verifyEvidence(evidenceArtifact.evidenceCards);
+    evidenceArtifact = { type: "evidence-cards", evidenceCards: verifiedCards };
+    yield { type: "artifact", artifact: evidenceArtifact };
+  }
   artifacts.push(evidenceArtifact);
+  const verifiedCount = evidenceArtifact.evidenceCards.filter(
+    (card) => card.provenanceStatus === "verified"
+  ).length;
   yield* phaseCompleted(
     phases,
     "Evidence Research",
-    `Evidence cards generated from ${evidencePlan.items.length} research tasks.`
+    `Evidence cards generated from ${evidencePlan.items.length} research tasks; ${verifiedCount} with verified source links.`
   );
   yield phaseMetric("Evidence Research", phaseStartedAt, now, "complete");
 

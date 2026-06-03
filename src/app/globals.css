@@ -360,6 +360,32 @@ textarea {
   white-space: nowrap;
 }
 
+.provenance-chip {
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  margin-left: 8px;
+  padding: 2px 8px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.provenance-chip.verified {
+  background: #e3f6ea;
+  color: #1f7a45;
+}
+
+.provenance-chip.model-reported {
+  background: #fdf1dc;
+  color: #99680d;
+}
+
+.provenance-chip.unavailable {
+  background: #f0f1f4;
+  color: #6b7280;
+}
+
 .timeline {
   box-shadow: none;
   display: grid;

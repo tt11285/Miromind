@@ -1,6 +1,10 @@
 "use client";
 
-import type { AgentEvidenceCard, HypothesisNodeDraft } from "@/lib/agent/types";
+import type {
+  AgentEvidenceCard,
+  EvidenceProvenanceStatus,
+  HypothesisNodeDraft
+} from "@/lib/agent/types";
 import { useEffect, useMemo, useState } from "react";
 
 interface EvidencePanelProps {
@@ -8,6 +12,17 @@ interface EvidencePanelProps {
   nodes: HypothesisNodeDraft[];
   evidence: AgentEvidenceCard[];
   focusedEvidenceIds?: string[];
+}
+
+const provenanceLabel: Record<EvidenceProvenanceStatus, string> = {
+  verified: "Source verified",
+  "model-reported": "Model-reported",
+  unavailable: "Unverified"
+};
+
+function sourceHref(reference: string): string | null {
+  const match = reference.match(/https?:\/\/[^\s)]+/i);
+  return match ? match[0] : null;
 }
 
 export function EvidencePanel({
@@ -95,6 +110,9 @@ export function EvidencePanel({
             </div>
             <small>
               {nodeById.get(card.nodeId)?.label ?? card.nodeId} | {card.direction}
+              <span className={`provenance-chip ${card.provenanceStatus}`}>
+                {provenanceLabel[card.provenanceStatus]}
+              </span>
             </small>
             {expandedCardId === card.id ? (
               <div className="stack-card-detail">
@@ -102,7 +120,19 @@ export function EvidencePanel({
                 <blockquote>{card.quotedSnippet}</blockquote>
                 <small>{card.reasoningImpact}</small>
                 <small>
-                  {card.sourceType} | {card.provenanceStatus} | {card.urlOrReference}
+                  {card.sourceType} | {provenanceLabel[card.provenanceStatus]} |{" "}
+                  {sourceHref(card.urlOrReference) ? (
+                    <a
+                      href={sourceHref(card.urlOrReference) ?? undefined}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {card.urlOrReference}
+                    </a>
+                  ) : (
+                    card.urlOrReference
+                  )}
                 </small>
               </div>
             ) : null}
