@@ -578,9 +578,6 @@ export function LiveResearchWorkbench() {
             {telemetryMetrics.length > 0 && workbenchStage !== "complete" ? (
               <RunDiagnostics metrics={telemetryMetrics} />
             ) : null}
-            {memo ? (
-              null
-            ) : null}
           </section>
           {showTraceColumn ? (
             <>
