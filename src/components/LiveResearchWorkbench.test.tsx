@@ -438,6 +438,30 @@ describe("LiveResearchWorkbench", () => {
     await run.close();
   });
 
+  it("shows the agent status bar and live activity log during a run", async () => {
+    vi.stubGlobal("fetch", successfulRunFetch());
+
+    render(<LiveResearchWorkbench />);
+    runDefaultQuestion();
+
+    expect(await screen.findByText("Sources verified")).toBeInTheDocument();
+    expect(screen.getByText("Model calls")).toBeInTheDocument();
+    expect(await screen.findByText("Research complete")).toBeInTheDocument();
+  });
+
+  it("renders memo source citations that focus linked evidence", async () => {
+    vi.stubGlobal("fetch", successfulRunFetch());
+
+    render(<LiveResearchWorkbench />);
+    runDefaultQuestion();
+
+    const citation = await screen.findByRole("button", { name: "[1]" });
+    fireEvent.click(citation);
+
+    const auditTrail = screen.getByRole("region", { name: "Audit trail" });
+    expect(auditTrail).toHaveTextContent("node-1 source");
+  });
+
   it("expands the completed seven-step timeline from the summary card", async () => {
     vi.stubGlobal("fetch", successfulRunFetch());
 

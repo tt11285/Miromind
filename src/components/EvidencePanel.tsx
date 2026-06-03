@@ -31,7 +31,7 @@ export function EvidencePanel({
   evidence,
   focusedEvidenceIds = []
 }: EvidencePanelProps) {
-  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [isReasoningOpen, setIsReasoningOpen] = useState(false);
   const node = nodes.find((item) => item.id === selectedNodeId) ?? null;

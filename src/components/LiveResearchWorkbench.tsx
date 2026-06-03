@@ -15,12 +15,15 @@ import type {
 } from "@/lib/agent/types";
 import { parseJsonLines } from "@/lib/agent/streamClient";
 import { useEffect, useRef, useState } from "react";
+import { AgentActivityLog, type ActivityEntry, type ActivityKind } from "./AgentActivityLog";
 import { AgentInputPanel } from "./AgentInputPanel";
 import { AgentRunTimeline } from "./AgentRunTimeline";
+import { AgentStatusBar } from "./AgentStatusBar";
 import { AuditTrail } from "./AuditTrail";
 import { EvidencePanel } from "./EvidencePanel";
 import { HypothesisTree } from "./HypothesisTree";
 import { InvestmentMemo } from "./InvestmentMemo";
+import { SourcesSummary } from "./SourcesSummary";
 
 type WorkbenchStage = "intro" | "running" | "complete" | "error";
 
@@ -171,7 +174,20 @@ export function LiveResearchWorkbench() {
     right: 380
   });
   const [dragState, setDragState] = useState<DragState | null>(null);
+  const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [activityLog, setActivityLog] = useState<ActivityEntry[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!isRunning || runStartedAt == null) {
+      return;
+    }
+    const interval = window.setInterval(() => {
+      setElapsedMs(Date.now() - runStartedAt);
+    }, 250);
+    return () => window.clearInterval(interval);
+  }, [isRunning, runStartedAt]);
 
   useEffect(() => {
     fetch("/api/research/status")
@@ -244,12 +260,24 @@ export function LiveResearchWorkbench() {
     setExpandedEvidenceTaskIndex(null);
     setTelemetryMetrics([]);
     setPhases(initialPhases());
+    setActivityLog([]);
 
     const controller = new AbortController();
     abortRef.current = controller;
+    const startedAt = Date.now();
+    setRunStartedAt(startedAt);
+    setElapsedMs(0);
     let latestTree: HypothesisTreeArtifact | null = null;
     let runFailure: string | null = null;
     let cancelled = false;
+    let lastEvidenceCount = 0;
+
+    function log(text: string, kind: ActivityKind) {
+      setActivityLog((current) => [
+        ...current,
+        { id: `${current.length}-${kind}`, atMs: Date.now() - startedAt, text, kind }
+      ]);
+    }
 
     function applyArtifact(artifact: AgentArtifact) {
       switch (artifact.type) {
@@ -257,6 +285,7 @@ export function LiveResearchWorkbench() {
           latestTree = artifact;
           setTree(artifact);
           setSelectedNodeId(null);
+          log(`Generated ${artifact.nodes.length} hypotheses to test`, "model");
           break;
         case "evidence-plan":
           setEvidenceTasks(
@@ -269,6 +298,7 @@ export function LiveResearchWorkbench() {
               evidenceCards: []
             }))
           );
+          log(`Planned ${artifact.items.length} evidence tasks`, "info");
           break;
         case "evidence-cards":
           setEvidence(artifact);
@@ -280,12 +310,18 @@ export function LiveResearchWorkbench() {
                 : task;
             })
           );
+          if (artifact.evidenceCards.length > lastEvidenceCount) {
+            lastEvidenceCount = artifact.evidenceCards.length;
+            log(`Gathered ${lastEvidenceCount} evidence cards`, "source");
+          }
           break;
         case "scored-nodes":
           setScoredNodes(artifact);
+          log(`Scored nodes — provisional stance ${artifact.finalStance}`, "model");
           break;
         case "memo":
           setMemo(artifact);
+          log(`Memo synthesized — ${artifact.finalStance}`, "done");
           break;
         default:
           break;
@@ -309,9 +345,16 @@ export function LiveResearchWorkbench() {
         switch (event.type) {
           case "run-started":
             setModeLabel(event.mode === "demo-fallback" ? "Demo Fallback" : "Live Agent");
+            log(
+              event.mode === "demo-fallback"
+                ? "Run started in Demo Fallback mode"
+                : "Run started — MiroMind live agent",
+              "info"
+            );
             break;
           case "phase-started":
             updatePhase(event.phase, "running", event.detail);
+            log(event.detail, "info");
             if (event.phase === "Evidence Research") {
               setEvidenceTasks((current) =>
                 current.map((task) =>
@@ -322,6 +365,7 @@ export function LiveResearchWorkbench() {
             break;
           case "phase-completed":
             updatePhase(event.phase, "complete", event.detail);
+            log(`${event.phase} complete`, event.phase === "Evidence Research" ? "source" : "done");
             if (event.phase === "Evidence Research") {
               setEvidenceTasks((current) =>
                 current.map((task) =>
@@ -332,17 +376,27 @@ export function LiveResearchWorkbench() {
             break;
           case "phase-failed":
             updatePhase(event.phase, "failed", event.error);
+            log(`${event.phase} failed: ${event.error}`, "warn");
             break;
           case "telemetry":
             appendTelemetry([event.metric]);
+            if (event.metric.kind === "miromind-request" && event.metric.attempt === "repair") {
+              log(`Repairing ${event.metric.stageName} response…`, "warn");
+            }
+            if (event.metric.kind === "miromind-request" && event.metric.status === "failed") {
+              log(`${event.metric.stageName} request failed`, "warn");
+            }
             break;
           case "artifact":
             applyArtifact(event.artifact);
             break;
           case "run-failed":
             runFailure = event.error;
+            log(`Run failed: ${event.error}`, "warn");
             break;
           case "run-completed":
+            log("Research complete", "done");
+            break;
           default:
             break;
         }
@@ -355,6 +409,7 @@ export function LiveResearchWorkbench() {
       }
     } finally {
       setIsRunning(false);
+      setElapsedMs(Date.now() - startedAt);
       abortRef.current = null;
     }
 
@@ -402,6 +457,22 @@ export function LiveResearchWorkbench() {
     showTraceColumn ? "trace-visible" : "trace-hidden"
   ].join(" ");
 
+  const apiCalls = telemetryMetrics.filter(
+    (metric) => metric.kind === "miromind-request"
+  ).length;
+  const verifiedSources =
+    evidence?.evidenceCards.filter((card) => card.provenanceStatus === "verified").length ?? 0;
+  const totalSources = evidence?.evidenceCards.length ?? 0;
+  const runningPhaseIndex = phases.findIndex((phase) => phase.status === "running");
+  const stageLabel =
+    workbenchStage === "complete"
+      ? "Complete"
+      : workbenchStage === "error"
+        ? "Failed"
+        : runningPhaseIndex >= 0
+          ? `${runningPhaseIndex + 1}/7 · ${phases[runningPhaseIndex].name}`
+          : "Starting";
+
   return (
     <main
       className={shellClassName}
@@ -437,6 +508,15 @@ export function LiveResearchWorkbench() {
               </div>
               <span className="mode-pill">{modeLabel}</span>
             </div>
+            <AgentStatusBar
+              mode={modeLabel}
+              stageLabel={stageLabel}
+              elapsedMs={elapsedMs}
+              apiCalls={apiCalls}
+              verifiedSources={verifiedSources}
+              totalSources={totalSources}
+              isRunning={isRunning}
+            />
             {error ? (
               <div aria-live="assertive" className="error-panel error-toast" role="alert">
                 {error}
@@ -465,9 +545,7 @@ export function LiveResearchWorkbench() {
                 tasks={evidenceTasks}
               />
             ) : null}
-            {telemetryMetrics.length > 0 && workbenchStage !== "complete" ? (
-              <RunDiagnostics metrics={telemetryMetrics} />
-            ) : null}
+            <AgentActivityLog entries={activityLog} isRunning={isRunning} />
           </section>
           {showTraceColumn ? (
             <>
@@ -486,6 +564,7 @@ export function LiveResearchWorkbench() {
                 type="button"
               />
               <aside className="trace-column progressive-panel">
+                {evidence ? <SourcesSummary evidence={evidence.evidenceCards} /> : null}
                 {tree ? (
                   <HypothesisTree
                     nodes={tree.nodes}
@@ -514,6 +593,7 @@ export function LiveResearchWorkbench() {
             <section className="memo-span progressive-panel">
               <InvestmentMemo
                 memo={memo}
+                evidence={evidence?.evidenceCards ?? []}
                 selectedClaimId={selectedClaim?.id ?? null}
                 onClaimSelect={(claim) => {
                   setSelectedClaim(claim);
@@ -626,40 +706,3 @@ function EvidenceTaskBoard({
   );
 }
 
-function RunDiagnostics({ metrics }: { metrics: AgentTelemetryMetric[] }) {
-  const phaseMetrics = metrics.filter((metric) => metric.kind === "phase");
-  const requestMetrics = metrics.filter((metric) => metric.kind === "miromind-request");
-  const repairCount = requestMetrics.filter((metric) => metric.attempt === "repair").length;
-  const failedRequests = requestMetrics.filter((metric) => metric.status === "failed").length;
-  const totalPhaseMs = phaseMetrics.reduce((sum, metric) => sum + metric.durationMs, 0);
-  const latestMetrics = metrics.slice(-5);
-
-  return (
-    <section className="diagnostics-panel" aria-label="Run diagnostics">
-      <div>
-        <h3>Run Diagnostics</h3>
-        <p>
-          {formatDuration(totalPhaseMs)} measured · {requestMetrics.length} API calls ·{" "}
-          {repairCount} repairs · {failedRequests} failed
-        </p>
-      </div>
-      <ul>
-        {latestMetrics.map((metric, index) => (
-          <li key={`${metric.kind}-${index}-${metric.durationMs}`}>
-            {metric.kind === "phase"
-              ? `${metric.phase}: ${formatDuration(metric.durationMs)}`
-              : `${metric.stageName} ${metric.attempt}: ${formatDuration(metric.durationMs)} ${metric.status}`}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function formatDuration(durationMs: number): string {
-  if (durationMs < 1000) {
-    return `${Math.round(durationMs)}ms`;
-  }
-
-  return `${(durationMs / 1000).toFixed(1)}s`;
-}

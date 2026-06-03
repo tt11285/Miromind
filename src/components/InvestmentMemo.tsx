@@ -1,16 +1,21 @@
-import type { MemoArtifact, MemoClaim } from "@/lib/agent/types";
+import type { AgentEvidenceCard, MemoArtifact, MemoClaim } from "@/lib/agent/types";
 
 interface InvestmentMemoProps {
   memo: MemoArtifact;
+  evidence?: AgentEvidenceCard[];
   selectedClaimId: string | null;
   onClaimSelect: (claim: MemoClaim) => void;
 }
 
 export function InvestmentMemo({
   memo,
+  evidence = [],
   selectedClaimId,
   onClaimSelect
 }: InvestmentMemoProps) {
+  const citationOrdinal = new Map(evidence.map((card, index) => [card.id, index + 1]));
+  const evidenceById = new Map(evidence.map((card) => [card.id, card]));
+
   return (
     <section className="memo-panel" aria-label="Investment memo">
       <div className="memo-hero">
@@ -57,23 +62,52 @@ export function InvestmentMemo({
       </article>
 
       {memo.sections.map((section) => (
-        <button
-          className="trace-button"
-          key={section.id}
-          onClick={() =>
-            onClaimSelect({
-              id: `section-${section.id}`,
-              claimType: "section",
-              text: section.body,
-              linkedNodeIds: section.linkedNodeIds,
-              linkedEvidenceIds: section.linkedEvidenceIds
-            })
-          }
-          type="button"
-        >
-          <span>{section.title}</span>
-          <small>{section.body}</small>
-        </button>
+        <div className="trace-button-group" key={section.id}>
+          <button
+            className="trace-button"
+            onClick={() =>
+              onClaimSelect({
+                id: `section-${section.id}`,
+                claimType: "section",
+                text: section.body,
+                linkedNodeIds: section.linkedNodeIds,
+                linkedEvidenceIds: section.linkedEvidenceIds
+              })
+            }
+            type="button"
+          >
+            <span>{section.title}</span>
+            <small>{section.body}</small>
+          </button>
+          {section.linkedEvidenceIds.length > 0 ? (
+            <div className="citation-row" aria-label={`Sources for ${section.title}`}>
+              <span className="citation-label">Sources</span>
+              {section.linkedEvidenceIds.map((evidenceId) => {
+                const card = evidenceById.get(evidenceId);
+                const ordinal = citationOrdinal.get(evidenceId);
+                return (
+                  <button
+                    className="citation-chip"
+                    key={evidenceId}
+                    title={card?.sourceTitle ?? evidenceId}
+                    onClick={() =>
+                      onClaimSelect({
+                        id: `cite-${evidenceId}`,
+                        claimType: "section",
+                        text: card?.extractedFact ?? section.body,
+                        linkedNodeIds: card ? [card.nodeId] : section.linkedNodeIds,
+                        linkedEvidenceIds: [evidenceId]
+                      })
+                    }
+                    type="button"
+                  >
+                    [{ordinal ?? "?"}]
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
       ))}
 
       <section className="claim-panel" aria-label="Memo claims">

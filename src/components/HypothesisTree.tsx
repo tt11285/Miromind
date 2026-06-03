@@ -18,7 +18,7 @@ export function HypothesisTree({
   scoredNodes = [],
   onSelectNode
 }: HypothesisTreeProps) {
-  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [expandedNodeId, setExpandedNodeId] = useState<string | null>(null);
   const scoreByNodeId = new Map(scoredNodes.map((node) => [node.id, node]));
 

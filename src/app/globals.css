@@ -1072,3 +1072,224 @@ textarea {
     padding: 10px;
   }
 }
+
+/* Tier 1: agent status bar */
+.agent-status-bar {
+  align-items: center;
+  background: #0e1830;
+  border-radius: 10px;
+  color: #e8eefc;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: 8px 0 10px;
+  padding: 10px 14px;
+}
+
+.status-stat {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.status-stat small {
+  color: #9fb0d4;
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.status-stat strong {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-stat.status-stage {
+  margin-right: auto;
+}
+
+.status-dot {
+  border-radius: 999px;
+  height: 9px;
+  width: 9px;
+}
+
+.status-dot.live {
+  background: #34d399;
+  box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7);
+  animation: status-pulse 1.4s infinite;
+}
+
+.status-dot.idle {
+  background: #6b7280;
+}
+
+@keyframes status-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(52, 211, 153, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+  }
+}
+
+.agent-status-bar .mode-pill {
+  border-color: #2b3c63;
+  color: #aecbff;
+}
+
+/* Tier 1: live activity log */
+.activity-log {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+}
+
+.activity-live {
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.activity-stream {
+  display: flex;
+  flex-direction: column;
+  font-family: "SFMono-Regular", ui-monospace, "JetBrains Mono", Menlo, monospace;
+  font-size: 12px;
+  gap: 3px;
+  margin-top: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.activity-line {
+  display: flex;
+  gap: 10px;
+  line-height: 1.5;
+}
+
+.activity-time {
+  color: #9aa6b8;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  width: 44px;
+}
+
+.activity-line.info .activity-text {
+  color: var(--ink);
+}
+.activity-line.model .activity-text {
+  color: var(--blue);
+}
+.activity-line.source .activity-text {
+  color: var(--green);
+}
+.activity-line.warn .activity-text {
+  color: var(--amber);
+}
+.activity-line.done .activity-text {
+  color: var(--teal);
+  font-weight: 700;
+}
+
+.activity-cursor {
+  background: currentColor;
+  display: inline-block;
+  height: 12px;
+  margin-left: 3px;
+  vertical-align: text-bottom;
+  width: 7px;
+  animation: cursor-blink 1s steps(2) infinite;
+}
+
+@keyframes cursor-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Tier 1: sources summary */
+.sources-summary {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  margin-bottom: 12px;
+  padding: 12px;
+}
+
+.sources-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.source-row {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto 1fr auto;
+}
+
+.source-row a {
+  color: var(--blue);
+  font-size: 13px;
+  overflow: hidden;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-row a:hover {
+  text-decoration: underline;
+}
+
+.source-row small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* Tier 1: memo inline citations */
+.trace-button-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.citation-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 2px 4px;
+}
+
+.citation-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.citation-chip {
+  background: #eef3ff;
+  border: 1px solid #c7d8f7;
+  border-radius: 6px;
+  color: var(--blue);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 1px 7px;
+}
+
+.citation-chip:hover {
+  background: #dbe7ff;
+}
