@@ -1,5 +1,13 @@
-import { synthesisOutputSchema } from "./schemas";
-import { buildSynthesisPrompt } from "./prompts";
+import {
+  hypothesisOutputSchema,
+  synthesisOutputSchema,
+  taskFrameOutputSchema
+} from "./schemas";
+import {
+  buildHypothesisPrompt,
+  buildSynthesisPrompt,
+  buildTaskFramePrompt
+} from "./prompts";
 import { attachMemoClaims } from "./memoClaims";
 import type {
   AgentEvidenceCard,
@@ -94,6 +102,45 @@ export function createLocalEvidencePlan(
       refutingSignals: node.counterEvidenceNeeded
     }))
   };
+}
+
+export async function frameTaskWithFallback(input: {
+  stageClient: StageClient | null;
+  request: AgentRequest;
+}): Promise<TaskFrameArtifact> {
+  if (!input.stageClient) {
+    return createLocalTaskFrame(input.request);
+  }
+  try {
+    const framed = await input.stageClient.completeJson(
+      "Task Framing",
+      buildTaskFramePrompt(input.request),
+      taskFrameOutputSchema
+    );
+    return { type: "task-frame", ...framed };
+  } catch {
+    return createLocalTaskFrame(input.request);
+  }
+}
+
+export async function generateHypothesisTreeWithFallback(input: {
+  stageClient: StageClient | null;
+  frame: TaskFrameArtifact;
+  request: AgentRequest;
+}): Promise<HypothesisTreeArtifact> {
+  if (!input.stageClient) {
+    return createLocalHypothesisTree(input.frame, input.request);
+  }
+  try {
+    const generated = await input.stageClient.completeJson(
+      "Hypothesis Generation",
+      buildHypothesisPrompt(input.frame, input.request),
+      hypothesisOutputSchema
+    );
+    return { type: "hypothesis-tree", ...generated };
+  } catch {
+    return createLocalHypothesisTree(input.frame, input.request);
+  }
 }
 
 export async function synthesizeMemoWithFallback(input: {
