@@ -12,6 +12,7 @@ interface AgentInputPanelProps {
   isRunning: boolean;
   modeLabel: "Live Agent" | "Demo Fallback" | "Error";
   onRun: (request: AgentRequest) => void;
+  onCancel?: () => void;
 }
 
 const exampleQuestion =
@@ -82,7 +83,8 @@ const suggestedQuestionsByTicker: Record<string, string[]> = {
 export function AgentInputPanel({
   isRunning,
   modeLabel,
-  onRun
+  onRun,
+  onCancel
 }: AgentInputPanelProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ListedSecurity[]>([]);
@@ -261,6 +263,12 @@ export function AgentInputPanel({
       >
         {isRunning ? "Running Research" : "Run Deep Research"}
       </button>
+
+      {isRunning && onCancel ? (
+        <button className="secondary-action" type="button" onClick={onCancel}>
+          Stop research
+        </button>
+      ) : null}
     </section>
   );
 }

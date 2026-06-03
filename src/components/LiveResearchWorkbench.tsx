@@ -14,7 +14,7 @@ import type {
   ScoredNodesArtifact
 } from "@/lib/agent/types";
 import { parseJsonLines } from "@/lib/agent/streamClient";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AgentInputPanel } from "./AgentInputPanel";
 import { AgentRunTimeline } from "./AgentRunTimeline";
 import { AuditTrail } from "./AuditTrail";
@@ -171,6 +171,7 @@ export function LiveResearchWorkbench() {
     right: 380
   });
   const [dragState, setDragState] = useState<DragState | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     fetch("/api/research/status")
@@ -244,8 +245,11 @@ export function LiveResearchWorkbench() {
     setTelemetryMetrics([]);
     setPhases(initialPhases());
 
+    const controller = new AbortController();
+    abortRef.current = controller;
     let latestTree: HypothesisTreeArtifact | null = null;
     let runFailure: string | null = null;
+    let cancelled = false;
 
     function applyArtifact(artifact: AgentArtifact) {
       switch (artifact.type) {
@@ -293,7 +297,8 @@ export function LiveResearchWorkbench() {
       const response = await fetch("/api/research/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(cleanedRequest)
+        body: JSON.stringify(cleanedRequest),
+        signal: controller.signal
       });
 
       if (!response.ok || !response.body) {
@@ -343,16 +348,30 @@ export function LiveResearchWorkbench() {
         }
       }
     } catch (runError) {
-      runFailure = runError instanceof Error ? runError.message : "Research run failed.";
+      if (controller.signal.aborted) {
+        cancelled = true;
+      } else {
+        runFailure = runError instanceof Error ? runError.message : "Research run failed.";
+      }
     } finally {
       setIsRunning(false);
+      abortRef.current = null;
     }
 
+    if (cancelled) {
+      setWorkbenchStage("intro");
+      setPhases(initialPhases());
+      return;
+    }
     if (runFailure) {
       handleRunFailure(runFailure);
       return;
     }
     setWorkbenchStage("complete");
+  }
+
+  function handleCancel() {
+    abortRef.current?.abort();
   }
 
   function appendTelemetry(metrics: AgentTelemetryMetric[] | undefined) {
@@ -392,6 +411,7 @@ export function LiveResearchWorkbench() {
         isRunning={isRunning}
         modeLabel={modeLabel}
         onRun={handleRun}
+        onCancel={handleCancel}
       />
       {showWorkspace ? (
         <>

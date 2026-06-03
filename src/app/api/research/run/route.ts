@@ -39,6 +39,7 @@ export async function POST(request: Request): Promise<Response> {
     : undefined;
   const runId = crypto.randomUUID();
 
+  let clientGone = false;
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
@@ -82,10 +83,16 @@ export async function POST(request: Request): Promise<Response> {
           verifyEvidence: (cards) =>
             verifyEvidenceCards(cards, { timeoutMs: verifyTimeoutMs })
         })) {
+          if (clientGone) {
+            return;
+          }
           controller.enqueue(encodeEvent(event));
         }
         controller.close();
       } catch (error) {
+        if (clientGone) {
+          return;
+        }
         if (agentRequest.fallbackAllowed && isCuratedFallbackEligible(agentRequest)) {
           enqueueFallbackRun(controller, runId, agentRequest);
           controller.close();
@@ -101,6 +108,9 @@ export async function POST(request: Request): Promise<Response> {
         );
         controller.close();
       }
+    },
+    cancel() {
+      clientGone = true;
     }
   });
 

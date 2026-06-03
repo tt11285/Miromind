@@ -45,3 +45,26 @@ export function searchListedSecurities(query: string): ListedSecurity[] {
     })
     .slice(0, 8);
 }
+
+/**
+ * Pluggable security lookup. Swap in a live symbol provider by implementing
+ * this interface and returning it from {@link getSecuritySearchProvider}.
+ */
+export interface SecuritySearchProvider {
+  search(query: string): Promise<ListedSecurity[]>;
+}
+
+export const localDemoSecurityProvider: SecuritySearchProvider = {
+  async search(query: string): Promise<ListedSecurity[]> {
+    return searchListedSecurities(query);
+  }
+};
+
+/**
+ * Resolves the active provider. Today this is always the curated demo list,
+ * but a live market-symbol provider can be selected here (e.g. from env)
+ * without changing the search route or the UI.
+ */
+export function getSecuritySearchProvider(): SecuritySearchProvider {
+  return localDemoSecurityProvider;
+}

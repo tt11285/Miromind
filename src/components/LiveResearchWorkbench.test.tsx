@@ -312,6 +312,58 @@ describe("LiveResearchWorkbench", () => {
     ).toBeInTheDocument();
   });
 
+  it("lets the user cancel an in-flight run and return to a runnable state", async () => {
+    const encoder = new TextEncoder();
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/research/status")) {
+        return statusResponse();
+      }
+      if (url.includes("/api/research/run")) {
+        const stream = new ReadableStream<Uint8Array>({
+          start(streamController) {
+            controller = streamController;
+          }
+        });
+        init?.signal?.addEventListener("abort", () => {
+          try {
+            controller.error(new DOMException("Aborted", "AbortError"));
+          } catch {
+            // stream already settled
+          }
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: { "Content-Type": "application/x-ndjson; charset=utf-8" }
+        });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<LiveResearchWorkbench />);
+    runDefaultQuestion();
+
+    await act(async () => {
+      controller.enqueue(
+        encoder.encode(
+          `${JSON.stringify({ type: "run-started", runId: "run-test", mode: "live-agent" })}\n`
+        )
+      );
+      controller.enqueue(encoder.encode(`${JSON.stringify(phaseStarted("Task Framing"))}\n`));
+    });
+
+    expect(await screen.findByText("Task Framing")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Stop research/i }));
+
+    expect(
+      await screen.findByRole("button", { name: "Run Deep Research" })
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Task Framing")).not.toBeInTheDocument();
+  });
+
   it("runs the streamed agent workflow and links memo trace to evidence", async () => {
     vi.stubGlobal("fetch", successfulRunFetch());
 
