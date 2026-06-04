@@ -12,6 +12,11 @@ interface AuditTrailProps {
   scoredNodes: ScoredNode[];
 }
 
+function sourceHref(reference: string): string | null {
+  const match = reference.match(/https?:\/\/[^\s)]+/i);
+  return match ? match[0] : null;
+}
+
 export function AuditTrail({
   claim,
   evidence,
@@ -56,16 +61,26 @@ export function AuditTrail({
         </article>
         <article>
           <h3>Linked Evidence Cards</h3>
-          {linkedEvidence.map((card) => (
-            <div className="audit-row" key={card.id}>
-              <strong>{card.sourceTitle}</strong>
-              <p>{card.extractedFact}</p>
-              <blockquote>{card.quotedSnippet}</blockquote>
-              <small>
-                {card.direction} | {card.provenanceStatus} | {card.urlOrReference}
-              </small>
-            </div>
-          ))}
+          {linkedEvidence.map((card) => {
+            const url = sourceHref(card.urlOrReference);
+            return (
+              <div className="audit-row" key={card.id}>
+                <strong>{card.sourceTitle}</strong>
+                <p>{card.extractedFact}</p>
+                <blockquote>{card.quotedSnippet}</blockquote>
+                <small>
+                  {card.direction} | {card.provenanceStatus} |{" "}
+                  {url ? (
+                    <a href={url} target="_blank" rel="noreferrer">
+                      {card.urlOrReference}
+                    </a>
+                  ) : (
+                    card.urlOrReference
+                  )}
+                </small>
+              </div>
+            );
+          })}
         </article>
       </div>
     </section>

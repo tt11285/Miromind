@@ -1,13 +1,14 @@
 "use client";
 
 import type { HypothesisNodeDraft, ScoredNode } from "@/lib/agent/types";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface HypothesisTreeProps {
   nodes: HypothesisNodeDraft[];
   highlightedNodeIds: string[];
   selectedNodeId: string | null;
   scoredNodes?: ScoredNode[];
+  collapseOnComplete?: boolean;
   onSelectNode: (nodeId: string) => void;
 }
 
@@ -16,11 +17,28 @@ export function HypothesisTree({
   highlightedNodeIds,
   selectedNodeId,
   scoredNodes = [],
+  collapseOnComplete = false,
   onSelectNode
 }: HypothesisTreeProps) {
   const [isPanelOpen, setIsPanelOpen] = useState(true);
+
+  useEffect(() => {
+    if (collapseOnComplete) {
+      setIsPanelOpen(false);
+    }
+  }, [collapseOnComplete]);
+
+  useEffect(() => {
+    if (highlightedNodeIds.length > 0 || selectedNodeId) {
+      setIsPanelOpen(true);
+    }
+  }, [highlightedNodeIds, selectedNodeId]);
   const [expandedNodeId, setExpandedNodeId] = useState<string | null>(null);
   const scoreByNodeId = new Map(scoredNodes.map((node) => [node.id, node]));
+  const maxAbsScore = Math.max(
+    0.01,
+    ...scoredNodes.map((node) => Math.abs(node.weightedScore))
+  );
 
   return (
     <section className="tree-panel" aria-label="Hypothesis tree">
@@ -64,6 +82,25 @@ export function HypothesisTree({
                 ? `${score.stance} | ${score.weightedScore}`
                 : `${Math.round(node.weight * 100)}% weight`}
             </strong>
+            {score ? (
+              <div className="diverging-track node-score-bar">
+                <span className="diverging-axis" aria-hidden="true" />
+                <span
+                  className={`diverging-fill ${score.weightedScore >= 0 ? "pos" : "neg"}`}
+                  style={
+                    score.weightedScore >= 0
+                      ? {
+                          left: "50%",
+                          width: `${(score.weightedScore / maxAbsScore) * 50}%`
+                        }
+                      : {
+                          right: "50%",
+                          width: `${(Math.abs(score.weightedScore) / maxAbsScore) * 50}%`
+                        }
+                  }
+                />
+              </div>
+            ) : null}
             {expandedNodeId === node.id ? (
               <div className="stack-card-detail">
                 <p>{node.claim}</p>

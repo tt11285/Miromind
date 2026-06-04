@@ -370,10 +370,12 @@ describe("LiveResearchWorkbench", () => {
     render(<LiveResearchWorkbench />);
     runDefaultQuestion();
 
-    expect(
-      await screen.findByText("Partially Supported", {}, { timeout: 3000 })
-    ).toBeInTheDocument();
-    const memoPanel = screen.getByRole("region", { name: "Investment memo" });
+    const memoPanel = await screen.findByRole(
+      "region",
+      { name: "Investment memo" },
+      { timeout: 3000 }
+    );
+    expect(within(memoPanel).getByText("Partially Supported")).toBeInTheDocument();
     fireEvent.click(within(memoPanel).getByRole("button", { name: /Revenue Growth/ }));
 
     const evidencePanel = screen.getByRole("region", { name: "Evidence cards" });
@@ -446,6 +448,8 @@ describe("LiveResearchWorkbench", () => {
 
     expect(await screen.findByText("Sources verified")).toBeInTheDocument();
     expect(screen.getByText("Model calls")).toBeInTheDocument();
+    // the activity log folds on completion; expand it to read the final line
+    fireEvent.click(await screen.findByRole("button", { name: /Agent activity/ }));
     expect(await screen.findByText("Research complete")).toBeInTheDocument();
   });
 
@@ -460,6 +464,25 @@ describe("LiveResearchWorkbench", () => {
 
     const auditTrail = screen.getByRole("region", { name: "Audit trail" });
     expect(auditTrail).toHaveTextContent("node-1 source");
+    expect(within(auditTrail).getByRole("link")).toHaveAttribute(
+      "href",
+      "https://investor.example.com/"
+    );
+
+    // the cited source is surfaced and expanded in the evidence panel
+    const evidencePanel = screen.getByRole("region", { name: "Evidence cards" });
+    expect(within(evidencePanel).getByText("Evidence snippet.")).toBeInTheDocument();
+  });
+
+  it("shows the reasoning rail and verdict breakdown", async () => {
+    vi.stubGlobal("fetch", successfulRunFetch());
+
+    render(<LiveResearchWorkbench />);
+    runDefaultQuestion();
+
+    expect(await screen.findByRole("region", { name: "Reasoning chain" })).toBeInTheDocument();
+    const breakdown = await screen.findByRole("region", { name: "Verdict breakdown" });
+    expect(breakdown).toHaveTextContent("How the verdict adds up");
   });
 
   it("expands the completed seven-step timeline from the summary card", async () => {

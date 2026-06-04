@@ -5,17 +5,18 @@ import type {
   EvidenceProvenanceStatus,
   HypothesisNodeDraft
 } from "@/lib/agent/types";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 interface EvidencePanelProps {
   selectedNodeId: string | null;
   nodes: HypothesisNodeDraft[];
   evidence: AgentEvidenceCard[];
   focusedEvidenceIds?: string[];
+  collapseOnComplete?: boolean;
 }
 
 const provenanceLabel: Record<EvidenceProvenanceStatus, string> = {
-  verified: "Source verified",
+  verified: "Quote verified on source",
   "model-reported": "Model-reported",
   unavailable: "Unverified"
 };
@@ -29,9 +30,17 @@ export function EvidencePanel({
   selectedNodeId,
   nodes,
   evidence,
-  focusedEvidenceIds = []
+  focusedEvidenceIds = [],
+  collapseOnComplete = false
 }: EvidencePanelProps) {
   const [isPanelOpen, setIsPanelOpen] = useState(true);
+  const focusedCardRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (collapseOnComplete) {
+      setIsPanelOpen(false);
+    }
+  }, [collapseOnComplete]);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [isReasoningOpen, setIsReasoningOpen] = useState(false);
   const node = nodes.find((item) => item.id === selectedNodeId) ?? null;
@@ -46,10 +55,27 @@ export function EvidencePanel({
   );
 
   useEffect(() => {
-    if (focusedEvidenceIds.length > 0 || selectedNodeId) {
+    if (focusedEvidenceIds.length > 0) {
+      setIsPanelOpen(true);
+      setExpandedCardId(focusedEvidenceIds[0]);
+    } else if (selectedNodeId) {
       setIsPanelOpen(true);
     }
-  }, [focusedEvidenceIds.length, selectedNodeId]);
+  }, [focusedEvidenceIds, selectedNodeId]);
+
+  useEffect(() => {
+    if (focusedEvidenceIds.length === 0 || !isPanelOpen) {
+      return;
+    }
+    const card = focusedCardRef.current;
+    if (card && typeof card.scrollIntoView === "function") {
+      try {
+        card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } catch {
+        // scrollIntoView is not implemented in every environment
+      }
+    }
+  }, [focusedEvidenceIds, isPanelOpen]);
 
   return (
     <section className="evidence-panel" aria-label="Evidence cards">
@@ -99,6 +125,7 @@ export function EvidencePanel({
               focusedEvidenceIds.includes(card.id) ? "focused" : ""
             ].join(" ")}
             key={card.id}
+            ref={focusedEvidenceIds[0] === card.id ? focusedCardRef : undefined}
             onClick={() =>
               setExpandedCardId((current) => (current === card.id ? null : card.id))
             }

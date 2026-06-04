@@ -23,7 +23,9 @@ import { AuditTrail } from "./AuditTrail";
 import { EvidencePanel } from "./EvidencePanel";
 import { HypothesisTree } from "./HypothesisTree";
 import { InvestmentMemo } from "./InvestmentMemo";
+import { ReasoningRail, type RailState, type RailStep } from "./ReasoningRail";
 import { SourcesSummary } from "./SourcesSummary";
+import { VerdictBreakdown } from "./VerdictBreakdown";
 
 type WorkbenchStage = "intro" | "running" | "complete" | "error";
 
@@ -98,6 +100,63 @@ function failedPhases(detail: string): AgentPhase[] {
     status: "failed",
     detail
   }));
+}
+
+const railIndexByPhase: Record<AgentPhase["name"], number> = {
+  "Task Framing": 0,
+  "Hypothesis Generation": 1,
+  "Evidence Planning": 2,
+  "Evidence Research": 2,
+  "Evidence Scoring": 3,
+  "Reasoning Synthesis": 4,
+  "Memo Rendering": 4
+};
+
+function buildRailSteps(input: {
+  workbenchStage: WorkbenchStage;
+  runningPhaseName: AgentPhase["name"] | null;
+  rootQuestion?: string;
+  hypothesisCount?: number;
+  evidenceCount?: number;
+  scored: ScoredNodesArtifact | null;
+  verdict?: string;
+}): RailStep[] {
+  const activeIndex =
+    input.workbenchStage === "complete"
+      ? 5
+      : input.runningPhaseName
+        ? railIndexByPhase[input.runningPhaseName]
+        : 0;
+
+  const defs = [
+    { key: "frame", label: "Question", value: input.rootQuestion ? "Framed" : "—" },
+    {
+      key: "hypotheses",
+      label: "Hypotheses",
+      value: input.hypothesisCount ? `${input.hypothesisCount} to test` : "—"
+    },
+    {
+      key: "evidence",
+      label: "Evidence",
+      value: input.evidenceCount ? `${input.evidenceCount} cards` : "—"
+    },
+    {
+      key: "score",
+      label: "Support score",
+      value: input.scored ? String(input.scored.finalScore) : "—"
+    },
+    { key: "verdict", label: "Verdict", value: input.verdict ?? "—" }
+  ];
+
+  return defs.map((def, index) => {
+    const state: RailState =
+      input.workbenchStage === "complete" || index < activeIndex
+        ? "done"
+        : index === activeIndex
+          ? "active"
+          : "pending";
+    return { ...def, state };
+  });
 }
 
 function sanitizeAgentRequest(request: AgentRequest): AgentRequest {
@@ -444,6 +503,7 @@ export function LiveResearchWorkbench() {
   }
 
   const hasStarted = workbenchStage !== "intro";
+  const isComplete = workbenchStage === "complete";
   const showWorkspace = hasStarted;
   const showTraceColumn = Boolean(tree || evidence);
   const renderedPhases = visiblePhases(phases, hasStarted);
@@ -472,6 +532,16 @@ export function LiveResearchWorkbench() {
         : runningPhaseIndex >= 0
           ? `${runningPhaseIndex + 1}/7 · ${phases[runningPhaseIndex].name}`
           : "Starting";
+
+  const railSteps = buildRailSteps({
+    workbenchStage,
+    runningPhaseName: runningPhaseIndex >= 0 ? phases[runningPhaseIndex].name : null,
+    rootQuestion: tree?.rootQuestion,
+    hypothesisCount: tree?.nodes.length,
+    evidenceCount: evidence?.evidenceCards.length,
+    scored: scoredNodes,
+    verdict: memo?.finalStance ?? scoredNodes?.finalStance
+  });
 
   return (
     <main
@@ -517,6 +587,7 @@ export function LiveResearchWorkbench() {
               totalSources={totalSources}
               isRunning={isRunning}
             />
+            <ReasoningRail steps={railSteps} />
             {error ? (
               <div aria-live="assertive" className="error-panel error-toast" role="alert">
                 {error}
@@ -534,7 +605,7 @@ export function LiveResearchWorkbench() {
             {workbenchStage === "complete" && isTimelineExpanded ? (
               <AgentRunTimeline phases={phases} />
             ) : null}
-            {evidenceTasks.length > 0 ? (
+            {evidenceTasks.length > 0 && !isComplete ? (
               <EvidenceTaskBoard
                 expandedIndex={expandedEvidenceTaskIndex}
                 onToggle={(index) =>
@@ -545,7 +616,11 @@ export function LiveResearchWorkbench() {
                 tasks={evidenceTasks}
               />
             ) : null}
-            <AgentActivityLog entries={activityLog} isRunning={isRunning} />
+            <AgentActivityLog
+              entries={activityLog}
+              isRunning={isRunning}
+              collapseOnComplete={isComplete}
+            />
           </section>
           {showTraceColumn ? (
             <>
@@ -571,6 +646,7 @@ export function LiveResearchWorkbench() {
                     selectedNodeId={selectedNodeId}
                     highlightedNodeIds={highlightedNodeIds}
                     scoredNodes={scoredNodes?.nodes ?? []}
+                    collapseOnComplete={isComplete}
                     onSelectNode={(nodeId) => {
                       setSelectedNodeId(nodeId);
                       setSelectedClaim(null);
@@ -584,6 +660,7 @@ export function LiveResearchWorkbench() {
                     nodes={tree?.nodes ?? []}
                     evidence={evidence.evidenceCards}
                     focusedEvidenceIds={focusedEvidenceIds}
+                    collapseOnComplete={isComplete}
                   />
                 ) : null}
               </aside>
@@ -591,6 +668,7 @@ export function LiveResearchWorkbench() {
           ) : null}
           {memo ? (
             <section className="memo-span progressive-panel">
+              {scoredNodes ? <VerdictBreakdown scored={scoredNodes} /> : null}
               <InvestmentMemo
                 memo={memo}
                 evidence={evidence?.evidenceCards ?? []}
