@@ -13,9 +13,9 @@ const encoder = new TextEncoder();
 
 // Default per-call timeout so a stuck MiroMind request can never hang the whole
 // run forever (which manifested as an 11-minute "network error" on Railway).
-// The deepresearch model is slow (~60s for hypothesis generation), so this must
-// be generous enough not to kill legitimately slow-but-working calls.
-const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
+// The deepresearch model is slow (~60s for hypothesis generation, more when it
+// browses), so this must be generous enough not to kill slow-but-working calls.
+const DEFAULT_REQUEST_TIMEOUT_MS = 300_000;
 // Emit a no-op newline this often so edge proxies don't drop an "idle" stream
 // during long (~60s) model stages. parseJsonLines ignores blank lines.
 const HEARTBEAT_MS = 10_000;
