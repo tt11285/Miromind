@@ -13,8 +13,72 @@ interface CreateMiroMindStageClientOptions {
   requestTimeoutMs?: number;
 }
 
-interface ChatCompletionResponse {
-  choices?: Array<{ message?: { content?: string | null } }>;
+type MessageLike = { content?: unknown; agent_summary?: unknown };
+type ChunkPayload = {
+  choices?: Array<{ delta?: MessageLike; message?: MessageLike }>;
+};
+
+function nodeText(node: MessageLike | undefined): { content: string; summary: string } {
+  return {
+    content: typeof node?.content === "string" ? node.content : "",
+    summary: typeof node?.agent_summary === "string" ? node.agent_summary : ""
+  };
+}
+
+/**
+ * Pulls the assistant's text out of a MiroMind response, which (depending on the
+ * model and prompt) arrives in three different shapes:
+ *  - a single JSON chat-completion object,
+ *  - an SSE stream of `data: {...}` chunks (returned for reasoning prompts even
+ *    when stream:false is requested), or
+ *  - content tucked into `agent_summary` instead of `content`.
+ * The returned string is then mined for JSON by parseAssistantJson.
+ */
+export function extractAssistantContent(body: string): string {
+  const trimmed = body.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  if (/^data:/m.test(trimmed)) {
+    let content = "";
+    let summary = "";
+    for (const rawLine of trimmed.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line.startsWith("data:")) {
+        continue;
+      }
+      const payload = line.slice(5).trim();
+      if (!payload || payload === "[DONE]") {
+        continue;
+      }
+      let chunk: ChunkPayload;
+      try {
+        chunk = JSON.parse(payload) as ChunkPayload;
+      } catch {
+        continue;
+      }
+      const choice = chunk.choices?.[0];
+      const picked = nodeText(choice?.delta ?? choice?.message);
+      content += picked.content;
+      summary += picked.summary;
+    }
+    return content || summary;
+  }
+
+  try {
+    const obj = JSON.parse(trimmed) as ChunkPayload;
+    // A chat-completion envelope: return its content (or "" when truly empty,
+    // so the caller can report a missing-content error).
+    if (Array.isArray(obj.choices)) {
+      const picked = nodeText(obj.choices[0]?.message);
+      return picked.content || picked.summary;
+    }
+  } catch {
+    // Not a single JSON object — fall through to the raw text below.
+  }
+
+  return trimmed;
 }
 
 function formatFailure(error: unknown): string {
@@ -138,8 +202,7 @@ export function createMiroMindStageClient(
         );
       }
 
-      const payload = (await response.json()) as ChatCompletionResponse;
-      const content = payload.choices?.[0]?.message?.content;
+      const content = extractAssistantContent(await response.text());
       if (!content) {
         throw new Error("MiroMind response did not include assistant content.");
       }

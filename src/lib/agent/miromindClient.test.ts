@@ -1,12 +1,46 @@
 import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
-import { createMiroMindStageClient, parseAssistantJson } from "./miromindClient";
+import {
+  createMiroMindStageClient,
+  extractAssistantContent,
+  parseAssistantJson
+} from "./miromindClient";
 import { createTaskFrameOutputSchemaForSecurity } from "./schemas";
 import {
   buildEvidenceResearchPrompt,
   buildEvidencePlanPrompt,
   buildTaskFramePrompt
 } from "./prompts";
+
+describe("extractAssistantContent", () => {
+  it("reads content from a single chat-completion JSON object", () => {
+    const body = JSON.stringify({
+      choices: [{ message: { content: '{"ok":true}' } }]
+    });
+    expect(extractAssistantContent(body)).toBe('{"ok":true}');
+  });
+
+  it("accumulates content from an SSE stream of chunks", () => {
+    const body = [
+      'data: {"choices":[{"delta":{"role":"assistant"}}]}',
+      'data: {"choices":[{"delta":{"content":"{\\"sector"}}]}',
+      'data: {"choices":[{"delta":{"content":"Frame\\":\\"AI\\"}"}}]}',
+      "data: [DONE]"
+    ].join("\n");
+    expect(extractAssistantContent(body)).toBe('{"sectorFrame":"AI"}');
+  });
+
+  it("falls back to agent_summary when content is empty", () => {
+    const body = JSON.stringify({
+      choices: [{ message: { content: "", agent_summary: '{"ok":1}' } }]
+    });
+    expect(extractAssistantContent(body)).toBe('{"ok":1}');
+  });
+
+  it("returns empty string for blank/whitespace bodies", () => {
+    expect(extractAssistantContent("   \n  ")).toBe("");
+  });
+});
 
 describe("parseAssistantJson", () => {
   it("parses fenced JSON", () => {
