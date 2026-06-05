@@ -48,7 +48,9 @@ const phaseNames: AgentPhaseName[] = [
   "Memo Rendering"
 ];
 
-const evidenceResearchConcurrency = 5;
+// Fewer simultaneous deepresearch calls = less chance the API rate-limits or
+// drops connections under load. Tunable via env without a code change.
+const evidenceResearchConcurrency = Number(process.env.MIROMIND_EVIDENCE_CONCURRENCY) || 3;
 
 export async function* runAgent(
   request: AgentRequest,
