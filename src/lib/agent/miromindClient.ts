@@ -25,10 +25,75 @@ function formatFailure(error: unknown): string {
   return String(error);
 }
 
+/**
+ * Returns the first balanced {...} or [...] block starting at or after `from`,
+ * correctly skipping braces/brackets that appear inside JSON string literals.
+ */
+function balancedJsonSlice(text: string): string | null {
+  for (let i = 0; i < text.length; i += 1) {
+    const open = text[i];
+    if (open !== "{" && open !== "[") {
+      continue;
+    }
+    const close = open === "{" ? "}" : "]";
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let j = i; j < text.length; j += 1) {
+      const ch = text[j];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (ch === "\\") {
+          escaped = true;
+        } else if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+      if (ch === '"') {
+        inString = true;
+      } else if (ch === open) {
+        depth += 1;
+      } else if (ch === close) {
+        depth -= 1;
+        if (depth === 0) {
+          return text.slice(i, j + 1);
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Parses the assistant's JSON, tolerating the ways models wrap it:
+ * a ```json fence, or prose around it (e.g. `The final answer: { ... }`).
+ */
 export function parseAssistantJson(text: string): unknown {
   const trimmed = text.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return JSON.parse(fenced ? fenced[1] : trimmed);
+  const candidates: string[] = [];
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced) {
+    candidates.push(fenced[1].trim());
+  }
+  candidates.push(trimmed);
+
+  const sliced = balancedJsonSlice(fenced ? fenced[1] : trimmed);
+  if (sliced) {
+    candidates.push(sliced);
+  }
+
+  let lastError: unknown = new Error("Assistant response did not contain valid JSON.");
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 export function createMiroMindStageClient(

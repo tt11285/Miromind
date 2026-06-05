@@ -9,7 +9,11 @@ import type {
 } from "./types";
 
 function jsonOnly(schemaName: string): string {
-  return `Return JSON only. Do not include markdown. The JSON must match ${schemaName}.`;
+  return (
+    `Return JSON only. Do not include markdown. The JSON must match ${schemaName}. ` +
+    `Output must start with { or [ — no preamble, no explanation, ` +
+    `no "The final answer" or similar text before or after the JSON.`
+  );
 }
 
 const taskFrameShape = `TaskFrameOutput fields:

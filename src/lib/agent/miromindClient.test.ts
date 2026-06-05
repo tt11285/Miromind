@@ -12,6 +12,30 @@ describe("parseAssistantJson", () => {
   it("parses fenced JSON", () => {
     expect(parseAssistantJson("```json\n{\"ok\":true}\n```")).toEqual({ ok: true });
   });
+
+  it("parses JSON wrapped in a prose preamble", () => {
+    expect(
+      parseAssistantJson('The final answer is:\n{"evidenceCards": [{"id": "ev-1"}]}')
+    ).toEqual({ evidenceCards: [{ id: "ev-1" }] });
+  });
+
+  it("parses JSON with prose before and after", () => {
+    expect(
+      parseAssistantJson('Here is my result: {"ok": true}. Let me know if you need more.')
+    ).toEqual({ ok: true });
+  });
+
+  it("ignores braces inside string values when slicing", () => {
+    expect(
+      parseAssistantJson('The final answer: {"note": "use {curly} braces"} done')
+    ).toEqual({ note: "use {curly} braces" });
+  });
+
+  it("parses a fenced block that follows a prose preamble", () => {
+    expect(
+      parseAssistantJson('Sure — here is the JSON:\n```json\n{"ok": 1}\n```\nThanks!')
+    ).toEqual({ ok: 1 });
+  });
 });
 
 describe("createMiroMindStageClient", () => {
