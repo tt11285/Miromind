@@ -175,6 +175,9 @@ export function buildSynthesisPrompt(input: {
     `Hypothesis tree: ${JSON.stringify(input.tree)}`,
     `Evidence cards: ${JSON.stringify(input.evidence)}`,
     `Scored nodes: ${JSON.stringify(input.scored)}`,
+    "Commit to a directional finalStance — Supported, Partially Supported, Weakly Unsupported, or Not Supported — based on the hypothesis analysis and your well-established knowledge of this company and sector.",
+    "Only use Inconclusive if the considerations are genuinely and evenly balanced after reasoning. Do NOT default to Inconclusive merely because live evidence retrieval was incomplete this run.",
+    "When live evidence is limited or unavailable, reason from the hypothesis tree and established public knowledge, set confidence accordingly (Low or Medium is fine), and still give a clear directional view. In the executive summary, briefly note that some live sources could not be retrieved this run.",
     "Use research-assistance language. Do not give personalized investment advice."
   ].join("\n");
 }

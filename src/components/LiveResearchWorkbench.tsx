@@ -668,7 +668,9 @@ export function LiveResearchWorkbench() {
           ) : null}
           {memo ? (
             <section className="memo-span progressive-panel">
-              {scoredNodes ? <VerdictBreakdown scored={scoredNodes} /> : null}
+              {scoredNodes ? (
+                <VerdictBreakdown scored={scoredNodes} stance={memo.finalStance} />
+              ) : null}
               <InvestmentMemo
                 memo={memo}
                 evidence={evidence?.evidenceCards ?? []}

@@ -2,20 +2,23 @@ import type { ScoredNodesArtifact } from "@/lib/agent/types";
 
 interface VerdictBreakdownProps {
   scored: ScoredNodesArtifact;
+  /** The memo's reasoned stance, authoritative over the raw evidence score. */
+  stance?: string;
 }
 
-export function VerdictBreakdown({ scored }: VerdictBreakdownProps) {
+export function VerdictBreakdown({ scored, stance }: VerdictBreakdownProps) {
   const maxAbs = Math.max(
     0.01,
     ...scored.nodes.map((node) => Math.abs(node.weightedScore))
   );
+  const headlineStance = stance ?? scored.finalStance;
 
   return (
     <section className="verdict-breakdown" aria-label="Verdict breakdown">
       <div className="panel-heading">
         <p className="eyebrow">How the verdict adds up</p>
         <h3>
-          {scored.finalStance} · support score {scored.finalScore}
+          {headlineStance} · support score {scored.finalScore}
         </h3>
       </div>
       <p className="verdict-explainer">
